@@ -138,31 +138,41 @@ def _press_pad(win, idx):
     return win.status.mpos[1]
 
 
-def _set_mapping(win, origin, bed):
+def _set_mapping(win, origin, invert):
     win.view.set_origin(origin)
-    win.chk_bed.setChecked(bed)
+    win.chk_invy.setChecked(invert)
     win._update_jog_mapping()
 
 
-def test_bed_mode_up_arrow_is_y_minus(win):
-    assert win.chk_bed.isChecked() and win.pad.ysign == -1          # default for a moving-bed machine
-    assert _press_pad(win, 0) == pytest.approx(-5.0, abs=0.01)      # up arrow -> bed away -> Y-
-
-
-def test_tool_mode_standard_view_up_arrow_is_y_plus(win):
-    _set_mapping(win, "bottom-left", False)
-    assert win.pad.ysign == 1
+def test_default_up_arrow_is_y_plus_and_matches_drawing(win):
+    import numpy as np
+    assert not win.chk_invy.isChecked() and win.pad.ysign == 1
     assert _press_pad(win, 0) == pytest.approx(5.0, abs=0.01)       # up arrow -> Y+ -> marker up
+    win.view.set_view("top")
+    p = win.view.project(np.array([[0, 5.0, 0], [0, 0, 0]]))
+    assert p[0][1] < p[1][1]
 
 
-def test_tool_mode_mirrored_view_up_arrow_follows_drawing(win):
+def test_invert_checkbox_flips_arrows_only(win):
+    _set_mapping(win, "bottom-left", True)
+    assert win.pad.ysign == -1
+    assert _press_pad(win, 0) == pytest.approx(-5.0, abs=0.01)      # up arrow now sends Y-
+
+
+def test_mirrored_view_arrows_follow_drawing(win):
     import numpy as np
     _set_mapping(win, "top-left", False)
-    assert win.pad.ysign == -1
     assert _press_pad(win, 0) == pytest.approx(-5.0, abs=0.01)      # Y- is drawn upward in the mirrored view
     win.view.set_view("top")
     p = win.view.project(np.array([[0, -5.0, 0], [0, 0, 0]]))
     assert p[0][1] < p[1][1]
+
+
+def test_no_bed_wording_and_version_in_title(win):
+    from cncdeck import __version__
+    assert __version__ in win.windowTitle()
+    texts = " ".join(w.text() for w in win.findChildren(__import__("PySide6.QtWidgets", fromlist=["QCheckBox"]).QCheckBox))
+    assert "piatto" not in texts.lower()
 
 
 def test_default_view_is_physical_standard(win):

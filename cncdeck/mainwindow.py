@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBo
                                QSplitter, QTabWidget, QToolBar, QToolButton, QVBoxLayout, QWidget)
 from serial.tools import list_ports
 
-from . import grbl, theme
+from . import __version__, grbl, theme
 from .gcode import Program, format_duration, parse_program, preamble_for
 from .grbl import SIM_PORT, GrblConnection, Status
 from .settings_dialog import GrblSettingsDialog
@@ -24,6 +24,7 @@ from .widgets import (AxisRow, Card, CodeEditor, Console, JogPad, OverrideBox, R
 STEPS = [("0.01 mm", 0.01), ("0.1 mm", 0.1), ("1 mm", 1.0), ("5 mm", 5.0), ("10 mm", 10.0), ("50 mm", 50.0), ("Continuo", None)]
 BAUDS = [115200, 57600, 38400, 19200, 9600, 250000]
 APP_NAME = "CNC Deck"
+TITLE = f"CNC Deck {__version__}"
 
 
 class ParseThread(QThread):
@@ -40,7 +41,7 @@ class ParseThread(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(APP_NAME)
+        self.setWindowTitle(TITLE)
         self.setAcceptDrops(True)
         self.qs = QSettings("cncdeck", "cncdeck")
         self.conn: GrblConnection | None = None
@@ -209,13 +210,11 @@ class MainWindow(QMainWindow):
         g.addStretch()
         c.body.addLayout(g)
         g = QHBoxLayout()
-        self.chk_bed = QCheckBox("Y: le frecce muovono il piatto")
-        self.chk_bed.setToolTip(
-            "Macchina con piatto mobile su Y: la freccia su allontana il piatto da te (Y−), la freccia giù lo avvicina "
-            "(Y+). Se disattivo, le frecce seguono la fresa rispetto al pezzo, come nel disegno.")
-        self.chk_bed.setChecked(self.qs.value("bed_y", "true") == "true")
-        self.chk_bed.toggled.connect(self._bed_toggled)
-        g.addWidget(self.chk_bed)
+        self.chk_invy = QCheckBox("Inverti frecce Y")
+        self.chk_invy.setToolTip("Inverte solo la direzione delle frecce di jog su Y (anche da tastiera)")
+        self.chk_invy.setChecked(self.qs.value("invert_y", "false") == "true")
+        self.chk_invy.toggled.connect(self._invert_y_toggled)
+        g.addWidget(self.chk_invy)
         g.addStretch()
         g.addWidget(QLabel("Z sicura"))
         self.safe_z = QDoubleSpinBox()
@@ -387,12 +386,14 @@ class MainWindow(QMainWindow):
         bar.adjustSize()
 
     def _update_jog_mapping(self) -> None:
-        """Up arrow = Y- when the arrows move the bed; otherwise it follows the drawing (Y- if Y points down)."""
-        mirrored = self.view.origin == "top-left"
-        self.pad.set_y_sign(-1 if (self.chk_bed.isChecked() or mirrored) else 1)
+        """Up arrow follows the drawing (Y+ in the standard view, Y- if Y points down), optionally inverted."""
+        sign = -1 if self.view.origin == "top-left" else 1
+        if self.chk_invy.isChecked():
+            sign = -sign
+        self.pad.set_y_sign(sign)
 
-    def _bed_toggled(self, on: bool) -> None:
-        self.qs.setValue("bed_y", "true" if on else "false")
+    def _invert_y_toggled(self, on: bool) -> None:
+        self.qs.setValue("invert_y", "true" if on else "false")
         self._update_jog_mapping()
 
     def _build_statusbar(self) -> None:
@@ -820,7 +821,7 @@ class MainWindow(QMainWindow):
             return
         self.file_path = path
         self.qs.setValue("last_dir", os.path.dirname(path))
-        self.setWindowTitle(f"{os.path.basename(path)} — {APP_NAME}")
+        self.setWindowTitle(f"{os.path.basename(path)} — {TITLE}")
         self._loading_text = True
         self.editor.setPlainText(text)
         self._loading_text = False
@@ -836,7 +837,7 @@ class MainWindow(QMainWindow):
         with open(path, "w", encoding="utf-8") as f:
             f.write(self.editor.toPlainText())
         self.file_path = path
-        self.setWindowTitle(f"{os.path.basename(path)} — {APP_NAME}")
+        self.setWindowTitle(f"{os.path.basename(path)} — {TITLE}")
         self.sb_state.setText(f"Salvato {path}")
 
     def _rates(self):
