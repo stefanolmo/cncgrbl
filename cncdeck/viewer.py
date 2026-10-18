@@ -105,7 +105,7 @@ class ToolpathView(QWidget):
         y, p = math.radians(self.yaw), math.radians(self.pitch)
         cz, sz, cx, sx = math.cos(y), math.sin(y), math.cos(p), math.sin(p)
         rz = np.array([[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]])
-        rx = np.array([[1, 0, 0], [0, cx, -sx], [0, sx, cx]])
+        rx = np.array([[1, 0, 0], [0, cx, sx], [0, -sx, cx]])  # +Z must point up on screen
         return rx @ rz
 
     def project(self, pts: np.ndarray) -> np.ndarray:
