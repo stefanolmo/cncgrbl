@@ -39,3 +39,15 @@ def test_orbit_drag_follows_mouse():
     v.yaw = 0.0
     v.orbit(0, 30)                      # drag down -> near edge moves down
     assert v.project(near)[0][1] > y0
+
+
+def test_tool_marker_moves_up_when_y_increases():
+    v = make()
+    v.set_view("top")
+    v.set_tool([0, 0, 0])
+    y0 = v.project(v.tool[None, :])[0][1]
+    v.set_tool([0, 5.0, 0])
+    y1 = v.project(v.tool[None, :])[0][1]
+    assert y1 < y0                       # Y+ -> marker moves up (like the spindle)
+    v.set_tool([5.0, 0, 0])
+    assert v.project(v.tool[None, :])[0][0] > v.project(np.array([[0.0, 0, 0]]))[0][0]   # X+ -> right

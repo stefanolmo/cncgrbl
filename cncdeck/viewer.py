@@ -91,7 +91,10 @@ class ToolpathView(QWidget):
             self.update()
 
     def set_tool(self, pos) -> None:
-        self.tool = np.asarray(pos, dtype=float)
+        """Tool marker position (work coordinates). Its Y is drawn mirrored so the marker moves the way the
+        spindle really does when Y changes (Y+ moves it up on screen), unlike the Y-down toolpath."""
+        x, y, z = (float(v) for v in pos)
+        self.tool = np.array([x, -y, z])
         self.update()
 
     def set_envelope(self, lo, hi) -> None:
