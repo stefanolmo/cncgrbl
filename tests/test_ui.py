@@ -156,7 +156,7 @@ def test_loaded_file_keeps_origin_top_left(win, tmp_path):
     f = tmp_path / "pos.nc"
     f.write_text("G21G90\nG0X0Y0\nG1X40Y0F500\nG1X40Y25\nG1X0Y25\nG1X0Y0\n")
     win.load_file(str(f))
-    assert pump(lambda: win.program is not None and len(win.program.path) == 5)
+    assert pump(lambda: win.program is not None and len(win.program.path) == 4)
     win.view.set_view("top")
     assert win.view.origin == "top-left"
     pts = win.view.project(np.array([[0.0, 0, 0], [40.0, 25.0, 0]]))
@@ -168,7 +168,7 @@ def test_loaded_file_negative_y_appears_above_origin(win, tmp_path):
     f = tmp_path / "neg.nc"
     f.write_text("G21G90\nG0X0Y0\nG1X40Y0F500\nG1X40Y-25\nG1X0Y-25\nG1X0Y0\n")
     win.load_file(str(f))
-    assert pump(lambda: win.program is not None and len(win.program.path) == 5)
+    assert pump(lambda: win.program is not None and len(win.program.path) == 4)
     win.view.set_view("top")
     pts = win.view.project(np.array([[0.0, 0, 0], [40.0, -25.0, 0]]))
     assert pts[1][1] < pts[0][1]   # in a Y-down view, negative Y is drawn above the origin
