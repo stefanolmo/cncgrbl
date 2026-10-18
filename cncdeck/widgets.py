@@ -110,7 +110,7 @@ class JogPad(QWidget):
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setSpacing(6)
         self.buttons: list[QToolButton] = []
-        self.ysign = 1          # +1: up arrow = Y+ (CAD view); -1: up arrow = Y- (Y points down on screen)
+        self.ysign = 1          # +1: up arrow = Y+; -1: up arrow = Y-
         self._y_buttons: list[tuple[QToolButton, int]] = []
 
         def mk(name, dx, dy, dz, r, c, tip):
@@ -146,9 +146,9 @@ class JogPad(QWidget):
         grid.setColumnMinimumWidth(3, 14)
 
 
-    def set_y_down(self, y_down: bool) -> None:
-        """Make the arrows match the view: with Y pointing down on screen, the down arrow increases Y."""
-        self.ysign = -1 if y_down else 1
+    def set_y_sign(self, sign: int) -> None:
+        """sign=+1: up arrow sends Y+; sign=-1: up arrow sends Y-."""
+        self.ysign = -1 if sign < 0 else 1
         for b, dy in self._y_buttons:
             arrow = "↑" if dy > 0 else "↓"
             b.setToolTip(f"Y{'+' if dy * self.ysign > 0 else '−'}  ({arrow})")

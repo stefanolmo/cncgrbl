@@ -138,22 +138,39 @@ def _press_pad(win, idx):
     return win.status.mpos[1]
 
 
-def test_down_arrow_increases_y_in_mirrored_view(win):
-    win.view.set_origin("top-left")
-    win.pad.set_y_down(True)
-    assert win.pad.ysign == -1
-    assert _press_pad(win, 3) == pytest.approx(5.0, abs=0.01)     # down arrow -> Y+ -> tool moves down on screen
-    assert win.view.project(__import__("numpy").array([[0, 5.0, 0], [0, 0, 0]]))[0][1] > \
-        win.view.project(__import__("numpy").array([[0, 5.0, 0], [0, 0, 0]]))[1][1]
+def _set_mapping(win, origin, bed):
+    win.view.set_origin(origin)
+    win.chk_bed.setChecked(bed)
+    win._update_jog_mapping()
 
 
-def test_default_view_is_physical_up_arrow_is_y_plus(win):
-    assert win.view.origin == "bottom-left" and win.pad.ysign == 1
-    assert _press_pad(win, 0) == pytest.approx(5.0, abs=0.01)     # up arrow -> Y+ (spindle away from operator)
+def test_bed_mode_up_arrow_is_y_minus(win):
+    assert win.chk_bed.isChecked() and win.pad.ysign == -1          # default for a moving-bed machine
+    assert _press_pad(win, 0) == pytest.approx(-5.0, abs=0.01)      # up arrow -> bed away -> Y-
+
+
+def test_tool_mode_standard_view_up_arrow_is_y_plus(win):
+    _set_mapping(win, "bottom-left", False)
+    assert win.pad.ysign == 1
+    assert _press_pad(win, 0) == pytest.approx(5.0, abs=0.01)       # up arrow -> Y+ -> marker up
+
+
+def test_tool_mode_mirrored_view_up_arrow_follows_drawing(win):
     import numpy as np
+    _set_mapping(win, "top-left", False)
+    assert win.pad.ysign == -1
+    assert _press_pad(win, 0) == pytest.approx(-5.0, abs=0.01)      # Y- is drawn upward in the mirrored view
+    win.view.set_view("top")
+    p = win.view.project(np.array([[0, -5.0, 0], [0, 0, 0]]))
+    assert p[0][1] < p[1][1]
+
+
+def test_default_view_is_physical_standard(win):
+    import numpy as np
+    assert win.view.origin == "bottom-left"
     win.view.set_view("top")
     p = win.view.project(np.array([[0, 5.0, 0], [0, 0, 0]]))
-    assert p[0][1] < p[1][1]                                      # Y+ is drawn upwards
+    assert p[0][1] < p[1][1]                                        # Y+ is drawn upwards
 
 
 def test_loaded_file_keeps_origin_top_left(win, tmp_path):

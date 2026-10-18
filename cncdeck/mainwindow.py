@@ -207,6 +207,16 @@ class MainWindow(QMainWindow):
         self.chk_keys = QCheckBox("Tastiera: frecce XY, Pag↑/↓ Z")
         g.addWidget(self.chk_keys)
         g.addStretch()
+        c.body.addLayout(g)
+        g = QHBoxLayout()
+        self.chk_bed = QCheckBox("Y: le frecce muovono il piatto")
+        self.chk_bed.setToolTip(
+            "Macchina con piatto mobile su Y: la freccia su allontana il piatto da te (Y−), la freccia giù lo avvicina "
+            "(Y+). Se disattivo, le frecce seguono la fresa rispetto al pezzo, come nel disegno.")
+        self.chk_bed.setChecked(self.qs.value("bed_y", "true") == "true")
+        self.chk_bed.toggled.connect(self._bed_toggled)
+        g.addWidget(self.chk_bed)
+        g.addStretch()
         g.addWidget(QLabel("Z sicura"))
         self.safe_z = QDoubleSpinBox()
         self.safe_z.setRange(0, 200)
@@ -368,13 +378,22 @@ class MainWindow(QMainWindow):
         def origin_changed():
             self.view.set_origin(org.currentData())
             self.qs.setValue("view_origin_v3", org.currentData())
-            self.pad.set_y_down(org.currentData() == "top-left")
+            self._update_jog_mapping()
 
-        self.pad.set_y_down(org.currentData() == "top-left")
+        self._update_jog_mapping()
         org.currentIndexChanged.connect(origin_changed)
         lay.addWidget(org)
         bar.move(10, 10)
         bar.adjustSize()
+
+    def _update_jog_mapping(self) -> None:
+        """Up arrow = Y- when the arrows move the bed; otherwise it follows the drawing (Y- if Y points down)."""
+        mirrored = self.view.origin == "top-left"
+        self.pad.set_y_sign(-1 if (self.chk_bed.isChecked() or mirrored) else 1)
+
+    def _bed_toggled(self, on: bool) -> None:
+        self.qs.setValue("bed_y", "true" if on else "false")
+        self._update_jog_mapping()
 
     def _build_statusbar(self) -> None:
         sb = self.statusBar()
