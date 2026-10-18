@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=CNC Deck
+GenericName=Sender G-code GRBL
+Comment=Invia G-code a CNC GRBL via seriale
+Exec=@EXEC@ %f
+Icon=@ICON@
+Terminal=false
+Categories=Development;Engineering;
+MimeType=text/x-gcode;
+StartupWMClass=cncdeck
