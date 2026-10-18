@@ -150,7 +150,7 @@ def test_view_is_y_down_and_has_no_view_or_invert_selectors(win):
     from PySide6.QtWidgets import QCheckBox, QComboBox
     win.view.set_view("top")
     p = win.view.project(np.array([[0, 5.0, 0], [0, 0, 0]]))
-    assert p[0][1] > p[1][1]                                         # Y+ drawn downwards
+    assert p[0][1] < p[1][1]                                         # Y+ drawn upwards, like the up arrow
     assert not [c for c in win.findChildren(QCheckBox) if "nverti" in c.text()]
     assert not [c for c in win.view.findChildren(QComboBox)]
 
@@ -162,7 +162,7 @@ def test_no_bed_wording_and_version_in_title(win):
     assert "piatto" not in texts.lower()
 
 
-def test_loaded_file_has_origin_top_left(win, tmp_path):
+def test_loaded_file_positive_y_above_origin(win, tmp_path):
     import numpy as np
     f = tmp_path / "pos.nc"
     f.write_text("G21G90\nG0X0Y0\nG1X40Y0F500\nG1X40Y25\nG1X0Y25\nG1X0Y0\n")
@@ -170,10 +170,10 @@ def test_loaded_file_has_origin_top_left(win, tmp_path):
     assert pump(lambda: win.program is not None and len(win.program.path) == 4)
     win.view.set_view("top")
     pts = win.view.project(np.array([[0.0, 0, 0], [40.0, 25.0, 0]]))
-    assert pts[1][0] > pts[0][0] and pts[1][1] > pts[0][1]    # part lies right of and below the origin
+    assert pts[1][0] > pts[0][0] and pts[1][1] < pts[0][1]    # part lies right of and above the origin
 
 
-def test_loaded_file_negative_y_appears_above_origin(win, tmp_path):
+def test_loaded_file_negative_y_appears_below_origin_like_cam_preview(win, tmp_path):
     import numpy as np
     f = tmp_path / "neg.nc"
     f.write_text("G21G90\nG0X0Y0\nG1X40Y0F500\nG1X40Y-25\nG1X0Y-25\nG1X0Y0\n")
@@ -181,4 +181,23 @@ def test_loaded_file_negative_y_appears_above_origin(win, tmp_path):
     assert pump(lambda: win.program is not None and len(win.program.path) == 4)
     win.view.set_view("top")
     pts = win.view.project(np.array([[0.0, 0, 0], [40.0, -25.0, 0]]))
-    assert pts[1][1] < pts[0][1]   # negative Y is drawn above the origin
+    assert pts[1][1] > pts[0][1]   # negative Y is drawn below the origin (origin = top-left of the part)
+
+
+def test_real_cam_file_marker_follows_path_during_run(win):
+    import numpy as np
+    win.load_file("examples/ellipse_cam.gcode")
+    assert pump(lambda: win.program is not None and len(win.program.path) > 100)
+    win.view.set_view("top")
+    # ellipse is exported with negative Y: it must be drawn below the origin, to the right of it
+    c = win.view.project(np.array([[0.0, 0, 0], [40.0, -20.0, 0]]))
+    assert c[1][0] > c[0][0] and c[1][1] > c[0][1]
+    win.run_program()
+    assert pump(lambda: win.status.state == "Run" and win.status.mpos[2] < 0.5, 30)
+    p = win.program.path
+    # the marker (work position from GRBL) lies within 1 mm of some drawn cutting segment
+    pos = np.asarray(win.status.wpos, float)
+    a, b = p.start.astype(float), p.end.astype(float)
+    ab = b - a
+    t = np.clip(((pos - a) * ab).sum(1) / np.maximum((ab * ab).sum(1), 1e-12), 0, 1)
+    assert np.linalg.norm(a + t[:, None] * ab - pos, axis=1).min() < 2.0

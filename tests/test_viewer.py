@@ -11,12 +11,12 @@ def make():
     return v
 
 
-def test_top_view_origin_top_left_x_right_y_down():
+def test_top_view_x_right_y_up():
     v = make()
     v.set_view("top")
     o, x, y = v.project(np.array([[0.0, 0, 0], [10.0, 0, 0], [0, 10.0, 0]]))
     assert x[0] > o[0] and abs(x[1] - o[1]) < 1e-6      # X to the right
-    assert y[1] > o[1] and abs(y[0] - o[0]) < 1e-6      # Y downwards
+    assert y[1] < o[1] and abs(y[0] - o[0]) < 1e-6      # Y upwards
 
 
 @pytest.mark.parametrize("view", ["iso", "front", "right", "left"])
@@ -41,13 +41,19 @@ def test_orbit_drag_follows_mouse():
     assert v.project(near)[0][1] > y0
 
 
-def test_tool_marker_moves_up_when_y_increases():
+def test_tool_marker_sits_exactly_on_the_drawn_path_and_moves_like_y():
+    from cncdeck.gcode import parse_program
     v = make()
+    prog = parse_program(open("examples/ellipse_cam.gcode").read())
+    v.set_program(prog)
+    for view in ("top", "iso"):
+        v.set_view(view)
+        for k in (0, 20, len(prog.path) // 2, len(prog.path) - 1):
+            pt = prog.path.end[k].astype(float)
+            v.set_tool(pt)
+            assert np.allclose(v.project(v.tool[None, :])[0], v.project(pt[None, :])[0])   # marker on the path
     v.set_view("top")
     v.set_tool([0, 0, 0])
     y0 = v.project(v.tool[None, :])[0][1]
     v.set_tool([0, 5.0, 0])
-    y1 = v.project(v.tool[None, :])[0][1]
-    assert y1 < y0                       # Y+ -> marker moves up (like the spindle)
-    v.set_tool([5.0, 0, 0])
-    assert v.project(v.tool[None, :])[0][0] > v.project(np.array([[0.0, 0, 0]]))[0][0]   # X+ -> right
+    assert v.project(v.tool[None, :])[0][1] < y0       # Y+ -> up, like the up arrow / the spindle

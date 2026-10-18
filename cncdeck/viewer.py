@@ -13,9 +13,9 @@ from . import theme
 from .gcode import FEED, RAPID, Program
 
 N_BUCKETS = 24
-# Top view as on these machines: origin top-left, X to the right, Y increasing downwards (Y is mirrored
-# with respect to the CAD convention). Z points up.
-Y_FLIP = np.array([1.0, -1.0, 1.0])
+# Right-handed view that matches the machine: seen from above X goes right and Y goes up (the direction
+# of the jog "up" arrow); Z points up. Many CAM programs put the work origin at the top-left corner of the
+# design and therefore export negative Y, so the part is drawn *below* the origin.
 VIEWS = {  # yaw, pitch (degrees)
     "iso": (-35.0, 55.0), "top": (0.0, 0.0), "front": (0.0, 90.0), "right": (-90.0, 90.0), "left": (90.0, 90.0),
 }
@@ -91,10 +91,7 @@ class ToolpathView(QWidget):
             self.update()
 
     def set_tool(self, pos) -> None:
-        """Tool marker position (work coordinates). Its Y is drawn mirrored so the marker moves the way the
-        spindle really does when Y changes (Y+ moves it up on screen), unlike the Y-down toolpath."""
-        x, y, z = (float(v) for v in pos)
-        self.tool = np.array([x, -y, z])
+        self.tool = np.asarray(pos, dtype=float)
         self.update()
 
     def set_envelope(self, lo, hi) -> None:
@@ -116,7 +113,7 @@ class ToolpathView(QWidget):
 
     def project(self, pts: np.ndarray) -> np.ndarray:
         r = self._rot()
-        q = ((pts - self.center) * Y_FLIP) @ r.T
+        q = (pts - self.center) @ r.T
         out = np.empty((len(q), 2))
         out[:, 0] = self.width() / 2 + self.pan[0] + q[:, 0] * self.scale
         out[:, 1] = self.height() / 2 + self.pan[1] - q[:, 1] * self.scale
@@ -128,8 +125,8 @@ class ToolpathView(QWidget):
         self.fit(keep_angles=True)
 
     def _scene_bounds(self):
-        lo = np.array([-10.0, -10.0, -5.0])
-        hi = np.array([50.0, 50.0, 10.0])
+        lo = np.array([-10.0, -50.0, -5.0])     # empty scene: room toward the operator (negative Y)
+        hi = np.array([50.0, 10.0, 10.0])
         if self.program is not None and len(self.program.path):
             lo = np.array(self.program.bounds_min)
             hi = np.array(self.program.bounds_max)
@@ -141,7 +138,7 @@ class ToolpathView(QWidget):
         lo, hi = self._scene_bounds()
         self.center = (lo + hi) / 2
         corners = np.array([[x, y, z] for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])])
-        q = ((corners - self.center) * Y_FLIP) @ self._rot().T
+        q = (corners - self.center) @ self._rot().T
         w = max(q[:, 0].max() - q[:, 0].min(), 1.0)
         h = max(q[:, 1].max() - q[:, 1].min(), 1.0)
         self.scale = 0.84 * min(self.width() / w, self.height() / h)

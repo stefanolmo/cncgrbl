@@ -138,6 +138,7 @@ def parse_program(text: str, rapid_rates=(500.0, 500.0, 500.0), default_feed=0.0
     line_time = np.zeros(len(lines))
     warn = prog.warnings
     unsupported_seen = set()
+    moved = False   # becomes True after the first real motion (the start position is unknown before)
 
     def add_seg(p0, p1, kind, i):
         starts.append(np.array(p0, dtype=np.float32))
@@ -208,10 +209,14 @@ def parse_program(text: str, rapid_rates=(500.0, 500.0, 500.0), default_feed=0.0
 
         if motion in (0, 1):
             kind = RAPID if motion == 0 else FEED
+            if kind == FEED and ((tgt[2] > 0 and pos[2] > 0) or not moved):
+                kind = RAPID    # CAM often positions with G1 above the work; the very first move starts from
+                                # an unknown position: draw both as air moves
             dist = float(np.linalg.norm(tgt - pos))
             if dist > 0:
+                moved = True
                 add_seg(pos, tgt, kind, i)
-                if kind == RAPID:
+                if motion == 0:
                     prog.rapid_length += dist
                     d = np.abs(tgt - pos)
                     line_time[i] += float(max(d[j] / max(rapid_rates[j], 1.0) for j in range(3))) * 60.0
@@ -262,7 +267,9 @@ def parse_program(text: str, rapid_rates=(500.0, 500.0, 500.0), default_feed=0.0
     if starts:
         prog.path = Toolpath(np.array(starts, np.float32), np.array(ends, np.float32),
                              np.array(kinds, np.uint8), np.array(src, np.int32))
-        allpts = np.concatenate([prog.path.start, prog.path.end])
+        work = prog.path.kind == FEED          # size of the part = cutting moves only (not air moves)
+        sel = work if work.any() else np.ones(len(prog.path), bool)
+        allpts = np.concatenate([prog.path.start[sel], prog.path.end[sel]])
         prog.bounds_min = tuple(float(v) for v in allpts.min(axis=0))
         prog.bounds_max = tuple(float(v) for v in allpts.max(axis=0))
     prog.line_time = line_time

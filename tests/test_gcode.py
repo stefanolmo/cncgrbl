@@ -1,5 +1,7 @@
 import math
 
+import pytest
+
 from cncdeck.gcode import clean_line, parse_program, preamble_for
 
 
@@ -68,3 +70,14 @@ def test_tool_change_becomes_pause():
     p = parse_program("G0X1\nT2M6\nG0X2\n(M6 in comment)\nM06\n")
     assert [c for _, c in p.commands] == ["G0X1", "M0", "G0X2", "M0"]
     assert any("M6" in w for w in p.warnings)
+
+
+def test_cam_g1_positioning_above_work_is_drawn_as_air_move():
+    from cncdeck.gcode import RAPID, FEED
+    p = parse_program(open("examples/ellipse_cam.gcode").read())
+    assert p.bounds_min[1] == pytest.approx(-39.05, abs=0.01) and p.bounds_max[1] == pytest.approx(-5.35, abs=0.01)
+    assert p.bounds_min[0] == pytest.approx(22.35, abs=0.01) and p.bounds_max[0] == pytest.approx(56.05, abs=0.01)
+    kinds = list(p.path.kind)
+    assert kinds[0] == RAPID and kinds[1] == RAPID             # G1 Z2.54, G1 X.. Y.. above the work
+    assert FEED in kinds and not p.warnings
+    assert p.total_time > 5
