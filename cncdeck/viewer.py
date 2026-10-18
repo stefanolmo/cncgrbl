@@ -13,12 +13,13 @@ from . import theme
 from .gcode import FEED, RAPID, Program
 
 N_BUCKETS = 24
-# where the work origin appears in the top view -> mirror flags on world (x, y)
+# Where the work origin sits in the top view, as a rotation of the whole scene about Z (always a
+# proper right-handed view, never a mirror image).
 ORIGINS = {
-    "bottom-left": (1.0, 1.0),    # CAD convention: X right, Y up
-    "top-left": (1.0, -1.0),      # Y mirrored
-    "top-right": (-1.0, -1.0),    # X left, Y down
-    "bottom-right": (-1.0, 1.0),  # X mirrored
+    "bottom-left": 0.0,     # X right, Y up
+    "bottom-right": 90.0,   # X up,    Y left
+    "top-right": 180.0,     # X left,  Y down
+    "top-left": 270.0,      # X down,  Y right
 }
 VIEWS = {  # yaw, pitch (degrees)
     "iso": (-35.0, 55.0), "top": (0.0, 0.0), "front": (0.0, 90.0), "right": (-90.0, 90.0), "left": (90.0, 90.0),
@@ -46,7 +47,8 @@ class ToolpathView(QWidget):
         self.setMinimumSize(360, 300)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.ClickFocus)
-        self.yaw, self.pitch = VIEWS["iso"]
+        self.origin = "top-right"
+        self.yaw, self.pitch = VIEWS["iso"][0] + ORIGINS[self.origin], VIEWS["iso"][1]
         self.scale = 4.0
         self.pan = np.zeros(2)                  # screen-space pan in pixels
         self.center = np.zeros(3)               # world point at screen center
@@ -55,7 +57,6 @@ class ToolpathView(QWidget):
         self.done_upto = 0                      # number of segments already executed
         self.show_rapids = True
         self.show_envelope = False
-        self.origin = "top-right"
         self.envelope: tuple[np.ndarray, np.ndarray] | None = None  # (min,max) in work coords
         self._drag = None
         self._cache_key = None
@@ -116,24 +117,22 @@ class ToolpathView(QWidget):
         rx = np.array([[1, 0, 0], [0, cx, sx], [0, -sx, cx]])  # +Z must point up on screen
         return rx @ rz
 
-    def _flip(self) -> np.ndarray:
-        sx, sy = ORIGINS[self.origin]
-        return np.array([sx, sy, 1.0])
-
     def set_origin(self, name: str) -> None:
+        self.yaw += ORIGINS[name] - ORIGINS[self.origin]
         self.origin = name
         self.fit()
 
     def project(self, pts: np.ndarray) -> np.ndarray:
         r = self._rot()
-        q = ((pts - self.center) * self._flip()) @ r.T
+        q = (pts - self.center) @ r.T
         out = np.empty((len(q), 2))
         out[:, 0] = self.width() / 2 + self.pan[0] + q[:, 0] * self.scale
         out[:, 1] = self.height() / 2 + self.pan[1] - q[:, 1] * self.scale
         return out
 
     def set_view(self, name: str) -> None:
-        self.yaw, self.pitch = VIEWS[name]
+        yaw, self.pitch = VIEWS[name]
+        self.yaw = yaw + ORIGINS[self.origin]
         self.pan[:] = 0
         self.fit(keep_angles=True)
 
@@ -151,7 +150,7 @@ class ToolpathView(QWidget):
         lo, hi = self._scene_bounds()
         self.center = (lo + hi) / 2
         corners = np.array([[x, y, z] for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])])
-        q = ((corners - self.center) * self._flip()) @ self._rot().T
+        q = (corners - self.center) @ self._rot().T
         w = max(q[:, 0].max() - q[:, 0].min(), 1.0)
         h = max(q[:, 1].max() - q[:, 1].min(), 1.0)
         self.scale = 0.84 * min(self.width() / w, self.height() / h)
@@ -176,6 +175,11 @@ class ToolpathView(QWidget):
     def mouseReleaseEvent(self, e):
         self._drag = None
 
+    def orbit(self, dx: float, dy: float) -> None:
+        """Grab-style orbit: the surface under the cursor follows the mouse."""
+        self.yaw += dx * 0.4
+        self.pitch = min(max(self.pitch - dy * 0.4, 0.0), 180.0)
+
     def mouseMoveEvent(self, e):
         if not self._drag:
             return
@@ -183,8 +187,7 @@ class ToolpathView(QWidget):
         d = e.position() - last
         self._drag = (btn, e.position())
         if btn == Qt.LeftButton:
-            self.yaw -= d.x() * 0.4
-            self.pitch = min(max(self.pitch - d.y() * 0.4, 0.0), 180.0)
+            self.orbit(d.x(), d.y())
         else:
             self.pan += np.array([d.x(), d.y()])
         self._begin_interaction()
