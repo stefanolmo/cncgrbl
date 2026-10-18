@@ -138,34 +138,21 @@ def _press_pad(win, idx):
     return win.status.mpos[1]
 
 
-def _set_mapping(win, origin, invert):
-    win.view.set_origin(origin)
-    win.chk_invy.setChecked(invert)
-    win._update_jog_mapping()
+def test_up_arrow_is_y_plus_down_arrow_is_y_minus(win):
+    assert _press_pad(win, 0) == pytest.approx(5.0, abs=0.01)       # up arrow -> Y+
+    win.pad.buttons[3].pressed.emit()                                # down arrow -> Y-
+    win.pad.buttons[3].released.emit()
+    assert pump(lambda: win.status.state == "Idle" and abs(win.status.mpos[1]) < 0.01)
 
 
-def test_default_up_arrow_is_y_plus_and_matches_drawing(win):
+def test_view_is_y_down_and_has_no_view_or_invert_selectors(win):
     import numpy as np
-    assert not win.chk_invy.isChecked() and win.pad.ysign == 1
-    assert _press_pad(win, 0) == pytest.approx(5.0, abs=0.01)       # up arrow -> Y+ -> marker up
+    from PySide6.QtWidgets import QCheckBox, QComboBox
     win.view.set_view("top")
     p = win.view.project(np.array([[0, 5.0, 0], [0, 0, 0]]))
-    assert p[0][1] < p[1][1]
-
-
-def test_invert_checkbox_flips_arrows_only(win):
-    _set_mapping(win, "bottom-left", True)
-    assert win.pad.ysign == -1
-    assert _press_pad(win, 0) == pytest.approx(-5.0, abs=0.01)      # up arrow now sends Y-
-
-
-def test_mirrored_view_arrows_follow_drawing(win):
-    import numpy as np
-    _set_mapping(win, "top-left", False)
-    assert _press_pad(win, 0) == pytest.approx(-5.0, abs=0.01)      # Y- is drawn upward in the mirrored view
-    win.view.set_view("top")
-    p = win.view.project(np.array([[0, -5.0, 0], [0, 0, 0]]))
-    assert p[0][1] < p[1][1]
+    assert p[0][1] > p[1][1]                                         # Y+ drawn downwards
+    assert not [c for c in win.findChildren(QCheckBox) if "nverti" in c.text()]
+    assert not [c for c in win.view.findChildren(QComboBox)]
 
 
 def test_no_bed_wording_and_version_in_title(win):
@@ -175,27 +162,18 @@ def test_no_bed_wording_and_version_in_title(win):
     assert "piatto" not in texts.lower()
 
 
-def test_default_view_is_physical_standard(win):
-    import numpy as np
-    assert win.view.origin == "bottom-left"
-    win.view.set_view("top")
-    p = win.view.project(np.array([[0, 5.0, 0], [0, 0, 0]]))
-    assert p[0][1] < p[1][1]                                        # Y+ is drawn upwards
-
-
-def test_loaded_file_keeps_origin_top_left(win, tmp_path):
+def test_loaded_file_has_origin_top_left(win, tmp_path):
     import numpy as np
     f = tmp_path / "pos.nc"
     f.write_text("G21G90\nG0X0Y0\nG1X40Y0F500\nG1X40Y25\nG1X0Y25\nG1X0Y0\n")
     win.load_file(str(f))
     assert pump(lambda: win.program is not None and len(win.program.path) == 4)
     win.view.set_view("top")
-    assert win.view.origin == "bottom-left"
     pts = win.view.project(np.array([[0.0, 0, 0], [40.0, 25.0, 0]]))
-    assert pts[1][0] > pts[0][0] and pts[1][1] < pts[0][1]    # part lies right of and above the origin
+    assert pts[1][0] > pts[0][0] and pts[1][1] > pts[0][1]    # part lies right of and below the origin
 
 
-def test_loaded_file_negative_y_appears_below_origin(win, tmp_path):
+def test_loaded_file_negative_y_appears_above_origin(win, tmp_path):
     import numpy as np
     f = tmp_path / "neg.nc"
     f.write_text("G21G90\nG0X0Y0\nG1X40Y0F500\nG1X40Y-25\nG1X0Y-25\nG1X0Y0\n")
@@ -203,4 +181,4 @@ def test_loaded_file_negative_y_appears_below_origin(win, tmp_path):
     assert pump(lambda: win.program is not None and len(win.program.path) == 4)
     win.view.set_view("top")
     pts = win.view.project(np.array([[0.0, 0, 0], [40.0, -25.0, 0]]))
-    assert pts[1][1] > pts[0][1]   # negative Y is drawn below the origin
+    assert pts[1][1] < pts[0][1]   # negative Y is drawn above the origin

@@ -110,8 +110,6 @@ class JogPad(QWidget):
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setSpacing(6)
         self.buttons: list[QToolButton] = []
-        self.ysign = 1          # +1: up arrow = Y+; -1: up arrow = Y-
-        self._y_buttons: list[tuple[QToolButton, int]] = []
 
         def mk(name, dx, dy, dz, r, c, tip):
             b = QToolButton()
@@ -121,18 +119,16 @@ class JogPad(QWidget):
             b.setFixedSize(52, 52)
             b.setAutoRepeat(False)
             b.setToolTip(tip)
-            b.pressed.connect(lambda: self.pressed.emit(dx, dy * self.ysign, dz))
-            if dy:
-                self._y_buttons.append((b, dy))
+            b.pressed.connect(lambda: self.pressed.emit(dx, dy, dz))
             b.released.connect(self.released.emit)
             grid.addWidget(b, r, c)
             self.buttons.append(b)
             return b
 
-        mk("up", 0, 1, 0, 0, 1, "")
+        mk("up", 0, 1, 0, 0, 1, "Y+  (↑)")
         mk("left", -1, 0, 0, 1, 0, "X−  (←)")
         mk("right", 1, 0, 0, 1, 2, "X+  (→)")
-        mk("down", 0, -1, 0, 2, 1, "")
+        mk("down", 0, -1, 0, 2, 1, "Y−  (↓)")
         c = QLabel("XY")
         c.setAlignment(Qt.AlignCenter)
         c.setObjectName("muted")
@@ -144,14 +140,6 @@ class JogPad(QWidget):
         z.setObjectName("muted")
         grid.addWidget(z, 1, 4)
         grid.setColumnMinimumWidth(3, 14)
-
-
-    def set_y_sign(self, sign: int) -> None:
-        """sign=+1: up arrow sends Y+; sign=-1: up arrow sends Y-."""
-        self.ysign = -1 if sign < 0 else 1
-        for b, dy in self._y_buttons:
-            arrow = "↑" if dy > 0 else "↓"
-            b.setToolTip(f"Y{'+' if dy * self.ysign > 0 else '−'}  ({arrow})")
 
 
 class OverrideBox(QWidget):
