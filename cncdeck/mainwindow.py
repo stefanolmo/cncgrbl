@@ -356,17 +356,18 @@ class MainWindow(QMainWindow):
         mk("Rapidi", "Mostra i movimenti rapidi", self._toggle_rapids, True, True)
         mk("Area macchina", "Mostra i limiti di corsa della macchina ($130-132)", self._toggle_envelope, True, False)
         org = QComboBox()
-        org.setToolTip("Orientamento della vista dall'alto: dove sta l'origine e verso dove cresce Y")
+        org.setToolTip("Standard = come la macchina si muove davvero (X a destra, Y lontano da te, origine in basso a sinistra). "
+                      "Specchiata = Y verso il basso: corretta solo se sulla tua macchina Y+ avvicina la fresa all'operatore")
         org.setStyleSheet("padding:3px 8px; font-size:11px; background: rgba(20,26,33,200);")
-        for key, label in (("top-left", "Origine alto sx (Y giù)"), ("bottom-left", "Origine basso sx (Y su)")):
+        for key, label in (("bottom-left", "Standard: Y verso l'alto"), ("top-left", "Specchiata: Y verso il basso")):
             org.addItem(label, key)
-        saved = org.findData(self.qs.value("view_origin_v2", "top-left"))
+        saved = org.findData(self.qs.value("view_origin_v3", "bottom-left"))
         org.setCurrentIndex(max(0, saved))
         self.view.set_origin(org.currentData())
 
         def origin_changed():
             self.view.set_origin(org.currentData())
-            self.qs.setValue("view_origin_v2", org.currentData())
+            self.qs.setValue("view_origin_v3", org.currentData())
             self.pad.set_y_down(org.currentData() == "top-left")
 
         self.pad.set_y_down(org.currentData() == "top-left")

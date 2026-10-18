@@ -27,14 +27,14 @@ def test_top_view_axes(origin, y_down):
     assert (y[1] > o[1]) == y_down and abs(y[0] - o[0]) < 1e-6
 
 
-def test_default_is_origin_top_left_y_down():
+def test_default_is_physical_standard_view():
     QApplication.instance() or QApplication([])
     v = ToolpathView()
     v.resize(400, 300)
-    assert v.origin == "top-left"
+    assert v.origin == "bottom-left"
     v.set_view("top")
     o, x, y = v.project(np.array([[0.0, 0, 0], [10.0, 0, 0], [0, 10.0, 0]]))
-    assert x[0] > o[0] and y[1] > o[1]
+    assert x[0] > o[0] and y[1] < o[1]      # X right, Y up
 
 
 @pytest.mark.parametrize("origin", ["top-left", "bottom-left"])

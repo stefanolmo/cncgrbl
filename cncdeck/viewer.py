@@ -13,10 +13,12 @@ from . import theme
 from .gcode import FEED, RAPID, Program
 
 N_BUCKETS = 24
-# Top-view conventions. "top-left": X right, Y *down* (screen-style, origin top-left, matches a machine
-# whose +Y moves toward the operator). "bottom-left": CAD style, X right, Y up.
+# Top-view conventions. Default "bottom-left" is the physical truth for a standard GRBL machine, seen from
+# above with the operator at the bottom edge: X to the right, Y *away* from the operator (up on screen),
+# right-handed with Z up. "top-left" mirrors Y and is only correct for a machine whose +Y moves toward
+# the operator.
 ORIGINS = {"top-left": -1.0, "bottom-left": 1.0}   # Y mirror factor
-DEFAULT_ORIGIN = "top-left"
+DEFAULT_ORIGIN = "bottom-left"
 VIEWS = {  # yaw, pitch (degrees)
     "iso": (-35.0, 55.0), "top": (0.0, 0.0), "front": (0.0, 90.0), "right": (-90.0, 90.0), "left": (90.0, 90.0),
 }

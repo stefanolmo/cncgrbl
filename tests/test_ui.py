@@ -138,17 +138,22 @@ def _press_pad(win, idx):
     return win.status.mpos[1]
 
 
-def test_down_arrow_increases_y_in_default_y_down_view(win):
-    assert win.view.origin == "top-left" and win.pad.ysign == -1
+def test_down_arrow_increases_y_in_mirrored_view(win):
+    win.view.set_origin("top-left")
+    win.pad.set_y_down(True)
+    assert win.pad.ysign == -1
     assert _press_pad(win, 3) == pytest.approx(5.0, abs=0.01)     # down arrow -> Y+ -> tool moves down on screen
     assert win.view.project(__import__("numpy").array([[0, 5.0, 0], [0, 0, 0]]))[0][1] > \
         win.view.project(__import__("numpy").array([[0, 5.0, 0], [0, 0, 0]]))[1][1]
 
 
-def test_arrows_follow_cad_view(win):
-    win.view.set_origin("bottom-left")
-    win.pad.set_y_down(False)
-    assert _press_pad(win, 3) == pytest.approx(-5.0, abs=0.01)    # CAD view: down arrow -> Y-
+def test_default_view_is_physical_up_arrow_is_y_plus(win):
+    assert win.view.origin == "bottom-left" and win.pad.ysign == 1
+    assert _press_pad(win, 0) == pytest.approx(5.0, abs=0.01)     # up arrow -> Y+ (spindle away from operator)
+    import numpy as np
+    win.view.set_view("top")
+    p = win.view.project(np.array([[0, 5.0, 0], [0, 0, 0]]))
+    assert p[0][1] < p[1][1]                                      # Y+ is drawn upwards
 
 
 def test_loaded_file_keeps_origin_top_left(win, tmp_path):
@@ -158,12 +163,12 @@ def test_loaded_file_keeps_origin_top_left(win, tmp_path):
     win.load_file(str(f))
     assert pump(lambda: win.program is not None and len(win.program.path) == 4)
     win.view.set_view("top")
-    assert win.view.origin == "top-left"
+    assert win.view.origin == "bottom-left"
     pts = win.view.project(np.array([[0.0, 0, 0], [40.0, 25.0, 0]]))
-    assert pts[1][0] > pts[0][0] and pts[1][1] > pts[0][1]    # part lies right of and below the origin
+    assert pts[1][0] > pts[0][0] and pts[1][1] < pts[0][1]    # part lies right of and above the origin
 
 
-def test_loaded_file_negative_y_appears_above_origin(win, tmp_path):
+def test_loaded_file_negative_y_appears_below_origin(win, tmp_path):
     import numpy as np
     f = tmp_path / "neg.nc"
     f.write_text("G21G90\nG0X0Y0\nG1X40Y0F500\nG1X40Y-25\nG1X0Y-25\nG1X0Y0\n")
@@ -171,4 +176,4 @@ def test_loaded_file_negative_y_appears_above_origin(win, tmp_path):
     assert pump(lambda: win.program is not None and len(win.program.path) == 4)
     win.view.set_view("top")
     pts = win.view.project(np.array([[0.0, 0, 0], [40.0, -25.0, 0]]))
-    assert pts[1][1] < pts[0][1]   # in a Y-down view, negative Y is drawn above the origin
+    assert pts[1][1] > pts[0][1]   # negative Y is drawn below the origin
