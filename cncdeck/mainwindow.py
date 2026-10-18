@@ -356,12 +356,11 @@ class MainWindow(QMainWindow):
         mk("Rapidi", "Mostra i movimenti rapidi", self._toggle_rapids, True, True)
         mk("Area macchina", "Mostra i limiti di corsa della macchina ($130-132)", self._toggle_envelope, True, False)
         org = QComboBox()
-        org.setToolTip("Ruota la vista: dove appare l'origine (0,0) guardando il pezzo dall'alto")
+        org.setToolTip("Orientamento della vista dall'alto: dove sta l'origine e verso dove cresce Y")
         org.setStyleSheet("padding:3px 8px; font-size:11px; background: rgba(20,26,33,200);")
-        for key, label in (("top-right", "Origine: alto dx"), ("top-left", "Origine: alto sx"),
-                           ("bottom-left", "Origine: basso sx"), ("bottom-right", "Origine: basso dx")):
+        for key, label in (("top-left", "Origine alto sx (Y giù)"), ("bottom-left", "Origine basso sx (Y su)")):
             org.addItem(label, key)
-        saved = org.findData(self.qs.value("view_origin", "top-right"))
+        saved = org.findData(self.qs.value("view_origin", "top-left"))
         org.setCurrentIndex(max(0, saved))
         self.view.set_origin(org.currentData())
 

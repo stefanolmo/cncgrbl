@@ -13,14 +13,10 @@ from . import theme
 from .gcode import FEED, RAPID, Program
 
 N_BUCKETS = 24
-# Where the work origin sits in the top view, as a rotation of the whole scene about Z (always a
-# proper right-handed view, never a mirror image).
-ORIGINS = {
-    "bottom-left": 0.0,     # X right, Y up
-    "bottom-right": 90.0,   # X up,    Y left
-    "top-right": 180.0,     # X left,  Y down
-    "top-left": 270.0,      # X down,  Y right
-}
+# Top-view conventions. "top-left": X right, Y *down* (screen-style, origin top-left, matches a machine
+# whose +Y moves toward the operator). "bottom-left": CAD style, X right, Y up.
+ORIGINS = {"top-left": -1.0, "bottom-left": 1.0}   # Y mirror factor
+DEFAULT_ORIGIN = "top-left"
 VIEWS = {  # yaw, pitch (degrees)
     "iso": (-35.0, 55.0), "top": (0.0, 0.0), "front": (0.0, 90.0), "right": (-90.0, 90.0), "left": (90.0, 90.0),
 }
@@ -47,8 +43,8 @@ class ToolpathView(QWidget):
         self.setMinimumSize(360, 300)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.ClickFocus)
-        self.origin = "top-right"
-        self.yaw, self.pitch = VIEWS["iso"][0] + ORIGINS[self.origin], VIEWS["iso"][1]
+        self.origin = DEFAULT_ORIGIN
+        self.yaw, self.pitch = VIEWS["iso"]
         self.scale = 4.0
         self.pan = np.zeros(2)                  # screen-space pan in pixels
         self.center = np.zeros(3)               # world point at screen center
@@ -117,22 +113,24 @@ class ToolpathView(QWidget):
         rx = np.array([[1, 0, 0], [0, cx, sx], [0, -sx, cx]])  # +Z must point up on screen
         return rx @ rz
 
+    def _flip(self) -> np.ndarray:
+        return np.array([1.0, ORIGINS[self.origin], 1.0])
+
     def set_origin(self, name: str) -> None:
-        self.yaw += ORIGINS[name] - ORIGINS[self.origin]
-        self.origin = name
+        self.origin = name if name in ORIGINS else DEFAULT_ORIGIN
+        self._invalidate()
         self.fit()
 
     def project(self, pts: np.ndarray) -> np.ndarray:
         r = self._rot()
-        q = (pts - self.center) @ r.T
+        q = ((pts - self.center) * self._flip()) @ r.T
         out = np.empty((len(q), 2))
         out[:, 0] = self.width() / 2 + self.pan[0] + q[:, 0] * self.scale
         out[:, 1] = self.height() / 2 + self.pan[1] - q[:, 1] * self.scale
         return out
 
     def set_view(self, name: str) -> None:
-        yaw, self.pitch = VIEWS[name]
-        self.yaw = yaw + ORIGINS[self.origin]
+        self.yaw, self.pitch = VIEWS[name]
         self.pan[:] = 0
         self.fit(keep_angles=True)
 
@@ -150,7 +148,7 @@ class ToolpathView(QWidget):
         lo, hi = self._scene_bounds()
         self.center = (lo + hi) / 2
         corners = np.array([[x, y, z] for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])])
-        q = (corners - self.center) @ self._rot().T
+        q = ((corners - self.center) * self._flip()) @ self._rot().T
         w = max(q[:, 0].max() - q[:, 0].min(), 1.0)
         h = max(q[:, 1].max() - q[:, 1].min(), 1.0)
         self.scale = 0.84 * min(self.width() / w, self.height() / h)
