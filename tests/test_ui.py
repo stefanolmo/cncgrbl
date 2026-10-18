@@ -128,3 +128,47 @@ def test_continuous_jog_with_soft_limits_uses_g53(win):
     win.on_jog_press(-1, 0, 0)
     assert sent and sent[0].startswith("$J=G53G21G90X-159.000")
     win.on_jog_release()
+
+
+def _press_pad(win, idx):
+    win.step_combo.setCurrentIndex(win.step_combo.findData(5.0))
+    win.pad.buttons[idx].pressed.emit()
+    win.pad.buttons[idx].released.emit()
+    assert pump(lambda: win.status.state == "Idle" and abs(win.status.mpos[1]) > 4.9)
+    return win.status.mpos[1]
+
+
+def test_down_arrow_increases_y_in_default_y_down_view(win):
+    assert win.view.origin == "top-left" and win.pad.ysign == -1
+    assert _press_pad(win, 3) == pytest.approx(5.0, abs=0.01)     # down arrow -> Y+ -> tool moves down on screen
+    assert win.view.project(__import__("numpy").array([[0, 5.0, 0], [0, 0, 0]]))[0][1] > \
+        win.view.project(__import__("numpy").array([[0, 5.0, 0], [0, 0, 0]]))[1][1]
+
+
+def test_arrows_follow_cad_view(win):
+    win.view.set_origin("bottom-left")
+    win.pad.set_y_down(False)
+    assert _press_pad(win, 3) == pytest.approx(-5.0, abs=0.01)    # CAD view: down arrow -> Y-
+
+
+def test_loaded_file_keeps_origin_top_left(win, tmp_path):
+    import numpy as np
+    f = tmp_path / "pos.nc"
+    f.write_text("G21G90\nG0X0Y0\nG1X40Y0F500\nG1X40Y25\nG1X0Y25\nG1X0Y0\n")
+    win.load_file(str(f))
+    assert pump(lambda: win.program is not None and len(win.program.path) == 5)
+    win.view.set_view("top")
+    assert win.view.origin == "top-left"
+    pts = win.view.project(np.array([[0.0, 0, 0], [40.0, 25.0, 0]]))
+    assert pts[1][0] > pts[0][0] and pts[1][1] > pts[0][1]    # part lies right of and below the origin
+
+
+def test_loaded_file_negative_y_appears_above_origin(win, tmp_path):
+    import numpy as np
+    f = tmp_path / "neg.nc"
+    f.write_text("G21G90\nG0X0Y0\nG1X40Y0F500\nG1X40Y-25\nG1X0Y-25\nG1X0Y0\n")
+    win.load_file(str(f))
+    assert pump(lambda: win.program is not None and len(win.program.path) == 5)
+    win.view.set_view("top")
+    pts = win.view.project(np.array([[0.0, 0, 0], [40.0, -25.0, 0]]))
+    assert pts[1][1] < pts[0][1]   # in a Y-down view, negative Y is drawn above the origin

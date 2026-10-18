@@ -360,14 +360,16 @@ class MainWindow(QMainWindow):
         org.setStyleSheet("padding:3px 8px; font-size:11px; background: rgba(20,26,33,200);")
         for key, label in (("top-left", "Origine alto sx (Y giù)"), ("bottom-left", "Origine basso sx (Y su)")):
             org.addItem(label, key)
-        saved = org.findData(self.qs.value("view_origin", "top-left"))
+        saved = org.findData(self.qs.value("view_origin_v2", "top-left"))
         org.setCurrentIndex(max(0, saved))
         self.view.set_origin(org.currentData())
 
         def origin_changed():
             self.view.set_origin(org.currentData())
-            self.qs.setValue("view_origin", org.currentData())
+            self.qs.setValue("view_origin_v2", org.currentData())
+            self.pad.set_y_down(org.currentData() == "top-left")
 
+        self.pad.set_y_down(org.currentData() == "top-left")
         org.currentIndexChanged.connect(origin_changed)
         lay.addWidget(org)
         bar.move(10, 10)
@@ -726,7 +728,7 @@ class MainWindow(QMainWindow):
             fw = QApplication.focusWidget()
             if not isinstance(fw, (QLineEdit, QPlainTextEdit, QSpinBox, QDoubleSpinBox, QComboBox)):
                 if not ev.isAutoRepeat():
-                    d = {Qt.Key_Left: (-1, 0, 0), Qt.Key_Right: (1, 0, 0), Qt.Key_Up: (0, 1, 0), Qt.Key_Down: (0, -1, 0),
+                    d = {Qt.Key_Left: (-1, 0, 0), Qt.Key_Right: (1, 0, 0), Qt.Key_Up: (0, self.pad.ysign, 0), Qt.Key_Down: (0, -self.pad.ysign, 0),
                          Qt.Key_PageUp: (0, 0, 1), Qt.Key_PageDown: (0, 0, -1)}.get(ev.key())
                     if d:
                         if ev.type() == QEvent.KeyPress:
