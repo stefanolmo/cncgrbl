@@ -11,12 +11,12 @@ def make():
     return v
 
 
-def test_top_view_x_right_y_up():
+def test_top_view_origin_top_left_x_right_y_down():
     v = make()
     v.set_view("top")
     o, x, y = v.project(np.array([[0.0, 0, 0], [10.0, 0, 0], [0, 10.0, 0]]))
     assert x[0] > o[0] and abs(x[1] - o[1]) < 1e-6      # X to the right
-    assert y[1] < o[1] and abs(y[0] - o[0]) < 1e-6      # Y upwards
+    assert y[1] > o[1] and abs(y[0] - o[0]) < 1e-6      # Y downwards
 
 
 @pytest.mark.parametrize("view", ["iso", "front", "right", "left"])
