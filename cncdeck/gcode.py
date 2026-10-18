@@ -240,6 +240,8 @@ def parse_program(text: str, rapid_rates=(500.0, 500.0, 500.0), default_feed=0.0
                     warn.append(f"Riga {i + 1}: arco con raggio non valido")
                     pos = tgt
                     continue
+                if h < 0.01:
+                    warn.append(f"Riga {i + 1}: raggio quasi uguale a metà corda, GRBL potrebbe rifiutare l'arco (error:34)")
                 hh = -math.sqrt(h) / math.sqrt(d2)
                 if not cw:
                     hh = -hh

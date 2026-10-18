@@ -295,6 +295,10 @@ class SimulatedSerial:
                 if a in vals:
                     tgt[i] = vals[a] * k if (absolute or 53.0 in gs) else cur_w[i] + vals[a] * k
             mtgt = [tgt[i] + base[i] for i in range(3)]
+            if self._modal_motion in (2, 3) and "R" in vals and not jog:
+                dx, dy = tgt[0] - cur_w[0], tgt[1] - cur_w[1]
+                if 4 * (vals["R"] * k) ** 2 - (dx * dx + dy * dy) <= 1e-9:   # GRBL: error 34, radius too small
+                    return 34
             rapid = self._modal_motion == 0 and not jog
             self._planner.append(_Block(mtgt, self._feed if not rapid else 0.0, rapid=rapid,
                                         jog=jog, probe=probe, dwell=dwell))

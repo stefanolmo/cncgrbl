@@ -40,8 +40,8 @@ for hx, hy in ((65, 15), (75, 15), (65, 45), (75, 45)):
 # S-curve with arcs, R-format
 out.append("G0 X52 Y10")
 out.append("G1 Z-0.8 F100")
-out.append("G2 X52 Y30 R10 F250")
-out.append("G3 X52 Y50 R10 F250")
+out.append("G2 X52 Y30 R12 F250")
+out.append("G3 X52 Y50 R12 F250")
 out.append("G0 Z5")
 
 # zig-zag hatching

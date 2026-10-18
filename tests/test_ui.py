@@ -201,3 +201,34 @@ def test_real_cam_file_marker_follows_path_during_run(win):
     ab = b - a
     t = np.clip(((pos - a) * ab).sum(1) / np.maximum((ab * ab).sum(1), 1e-12), 0, 1)
     assert np.linalg.norm(a + t[:, None] * ab - pos, axis=1).min() < 2.0
+
+
+def test_grbl_error_shows_nonmodal_bar_and_app_stays_closable(win, tmp_path, monkeypatch):
+    modal = []
+    monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: (modal.append(a[2]), QMessageBox.Yes)[1]))
+    f = tmp_path / "arcs.nc"
+    # two consecutive arcs whose radius equals half the chord: GRBL answers error:34 to both
+    f.write_text("G21G90\nG0X0Y0\nG1X10F3000\nG2X10Y20R10F250\nG3X10Y40R10F250\nG1X20F3000\n")
+    win.load_file(str(f))
+    assert pump(lambda: win.program is not None and len(win.program.commands) == 6)
+    modal.clear()
+    win.run_program()
+    assert pump(lambda: win.error_bar.isVisible(), 20)
+    pump(lambda: False, 0.5)
+    assert "error:34" in win.error_label.text() and "Programma in pausa" in win.error_label.text()
+    assert not any("rifiutato" in m for m in modal)            # no blocking dialog for the error
+    # the main window still reacts: Interrompi aborts, bar disappears
+    win.btn_err_stop.click()
+    assert pump(lambda: not win._running and not win.error_bar.isVisible(), 15)
+
+
+def test_close_while_paused_on_error_does_not_hang(win, tmp_path):
+    f = tmp_path / "e.nc"
+    f.write_text("G21G90\nG2X10Y20R10F250\nG1X20F3000\n")
+    win.load_file(str(f))
+    assert pump(lambda: win.program is not None and len(win.program.commands) == 3)
+    win.run_program()
+    assert pump(lambda: win.error_bar.isVisible(), 20)
+    t0 = time.time()
+    win.close()                                                 # question() is stubbed to Yes by the fixture
+    assert time.time() - t0 < 4 and not win.conn.isRunning() and not win.isVisible()

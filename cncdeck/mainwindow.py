@@ -63,6 +63,9 @@ class MainWindow(QMainWindow):
         self._loading_text = False
         self._settings_dlg: GrblSettingsDialog | None = None
         self._alarm_text = ""
+        self._last_error = ""
+        self._first_error = ""
+        self._error_count = 0
         self._ports_sig: list[str] = []
 
         self._build_toolbar()
@@ -302,6 +305,23 @@ class MainWindow(QMainWindow):
         ab.addWidget(bh)
         self.alarm_bar.hide()
         tv.addWidget(self.alarm_bar)
+        self.error_bar = QFrame()
+        self.error_bar.setStyleSheet(f"QFrame{{background:#3a2d0c; border:1px solid {theme.WARN}; border-radius:8px;}}"
+                                     f"QLabel{{background:transparent; color:#fde68a; font-weight:600;}}")
+        eb = QHBoxLayout(self.error_bar)
+        eb.setContentsMargins(12, 8, 12, 8)
+        self.error_label = QLabel()
+        self.error_label.setWordWrap(True)
+        self.btn_err_resume = QPushButton("Riprendi")
+        self.btn_err_resume.clicked.connect(self._error_resume)
+        self.btn_err_stop = QPushButton("Interrompi")
+        self.btn_err_stop.setObjectName("danger")
+        self.btn_err_stop.clicked.connect(self.stop_program)
+        eb.addWidget(self.error_label, 1)
+        eb.addWidget(self.btn_err_resume)
+        eb.addWidget(self.btn_err_stop)
+        self.error_bar.hide()
+        tv.addWidget(self.error_bar)
         self.view = ToolpathView()
         self.view.setStyleSheet("border: 1px solid %s; border-radius: 10px;" % theme.BORDER)
         tv.addWidget(self.view, 1)
@@ -411,7 +431,9 @@ class MainWindow(QMainWindow):
         self.qs.setValue("port", self.port_combo.currentData())
         if self.conn and self.conn.isRunning():
             self.conn.disconnect_port()
-            self.conn.wait(2000)
+            if not self.conn.wait(3000):    # never let a stuck serial thread keep the app alive
+                self.conn.terminate()
+                self.conn.wait(500)
         super().closeEvent(e)
 
     # ------------------------------------------------------------------ ports / connection
@@ -891,6 +913,8 @@ class MainWindow(QMainWindow):
 
     def _begin_run(self, cmds: list[tuple[int, str]]) -> None:
         self._run_cmds = cmds
+        self._error_count = 0
+        self._last_error = ""
         self._acked_idx = -1
         self._running = True
         self._paused = False
@@ -930,16 +954,18 @@ class MainWindow(QMainWindow):
                     self.conn.stop()
 
     def on_program_state(self, s: str) -> None:
+        if s != "error":
+            self.error_bar.hide()
         if s == "running":
             self._paused = False
         elif s == "paused":
             self._paused = True
         elif s == "error":
+            # non-modal: a blocking dialog per rejected line stacks up and freezes the main window
             self._paused = True
-            self.tabs.setCurrentIndex(1)
-            QMessageBox.warning(self, "Errore GRBL",
-                                "GRBL ha rifiutato una riga (vedi Console). Il programma è in pausa.\n"
-                                "Premi Riprendi per continuare oppure Stop per interrompere.")
+            self._paused_at = time.monotonic()
+            self.error_label.setText(self._last_error or "GRBL ha rifiutato una riga. Il programma è in pausa.")
+            self.error_bar.show()
         elif s == "done":
             el = time.monotonic() - self._t0 - self._paused_total
             self.console.append(f"Programma completato in {format_duration(el)}", "info")
@@ -960,6 +986,20 @@ class MainWindow(QMainWindow):
 
     def on_line_acked(self, idx: int, ok: bool, code: int) -> None:
         self._acked_idx = idx
+        if not ok and 0 <= idx < len(self._run_cmds):
+            src, cmd = self._run_cmds[idx]
+            self._error_count += 1
+            if self._error_count == 1:      # keep the first rejected line: it is the cause
+                self._first_error = (f"GRBL ha rifiutato la riga {src + 1}: {cmd}  →  error:{code} "
+                                     f"{grbl.ERRORS.get(code, '')}. Programma in pausa.")
+            self._last_error = self._first_error + (f"  (+{self._error_count - 1} altre righe rifiutate, vedi Console)"
+                                                    if self._error_count > 1 else "")
+            if self.error_bar.isVisible():
+                self.error_label.setText(self._last_error)
+
+    def _error_resume(self) -> None:
+        self.error_bar.hide()
+        self.toggle_pause()
 
     def _estimate_exec_line(self, idx: int) -> int:
         """GRBL acks a line when it enters the planner (up to ~15 blocks ahead of the tool), so snap
