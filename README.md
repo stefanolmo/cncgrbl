@@ -3,7 +3,7 @@
 <p align="center"><img src="docs/splash.png" alt="CNC Deck - schermata iniziale" width="640"></p>
 
 Sender G-code per CNC **GRBL 1.1** (pensato per la CNC 1610 Pro) con interfaccia scura e viewer 3D, più un convertitore **SVG → G-code**.
-Python 3 + Qt6 (PySide6) + pyserial. Gira su Ubuntu 22.04/24.04.
+Python 3 + Qt6 (PySide6) + pyserial. Testato su Ubuntu 26.04 LTS.
 
 ## Com'è fatto
 
