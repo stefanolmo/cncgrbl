@@ -220,3 +220,105 @@ def test_pocket_performance_reasonable():
     t = time.time()
     cam.generate(d, [cam.Operation(kind="pocket", cut_depth=1, pass_depth=1)], cam.Job(tool_diameter=3.175))
     assert time.time() - t < 20
+
+
+# ---------------------------------------------------------------- holding tabs
+def flat_segments(gcode, z):
+    """Cutting segments (XY length > 0) that stay at height z."""
+    p = parse_program(gcode).path
+    m = (np.abs(p.start[:, 2] - z) < 1e-4) & (np.abs(p.end[:, 2] - z) < 1e-4) & (p.kind == 1)
+    return p.start[m][:, :2].astype(float), p.end[m][:, :2].astype(float)
+
+
+def tab_op(**kw):
+    base = dict(kind="outside", cut_depth=3.0, pass_depth=1.5, tab_mode="auto", tab_count=4, tab_width=4.0, tab_height=1.0)
+    base.update(kw)
+    return cam.Operation(**base)
+
+
+def test_auto_tabs_leave_material_only_on_the_last_pass():
+    d = doc()
+    res = cam.generate(d, [tab_op()], cam.Job(tool_diameter=3.0, origin="svg"))
+    assert not parse_program(res.gcode).warnings and not res.warnings
+    a, b = flat_segments(res.gcode, -2.0)                       # tab height = -3 + 1
+    assert np.hypot(*(b - a).T).sum() == pytest.approx(4 * 4.0, abs=0.05)          # 4 tabs x 4 mm
+    lines = res.gcode.splitlines()
+    assert sum(1 for l in lines if l.startswith("G1 Z-2")) == 4                    # 4 lifts
+    assert sum(1 for l in lines if l.startswith("G1 Z-3")) == 1 + 4                # initial plunge + 4 returns to depth
+    assert sum(1 for l in lines if l.startswith("G1 Z-1.5")) == 1                  # shallower pass: no tab logic
+    assert "(con linguette)" in res.gcode
+    # Z moves at tab boundaries are purely vertical (no diagonal plunge into the material)
+    assert not any(re.search(r"X.*Z|Z.*X", l) for l in lines if l.startswith("G1"))
+
+
+def test_tabs_are_evenly_spaced_and_not_in_the_first_pass():
+    d = doc()
+    res = cam.generate(d, [tab_op(tab_count=3, tab_width=6.0)], cam.Job(tool_diameter=3.0, origin="svg"))
+    a, b = flat_segments(res.gcode, -2.0)
+    mids = (a + b) / 2
+    assert len(mids) >= 3
+    # 3 tabs around a closed contour: their centres are ~perimeter/3 apart
+    steps = np.hypot(*np.diff(mids, axis=0).T)
+    assert steps.max() > 5 and np.hypot(*(b - a).T).sum() == pytest.approx(3 * 6.0, abs=0.05)
+
+
+def test_tab_shapes_mode_marks_the_path_where_a_marker_touches_it():
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="60mm" viewBox="0 0 100 60">'
+           '<rect id="part" x="10" y="10" width="40" height="30"/><circle id="mark" cx="30" cy="10" r="3"/></svg>')
+    d = parse_svg(svg)
+    res = cam.generate(d, [tab_op(tab_mode="shapes", tab_shapes={"mark"}, shapes=None)], cam.Job(tool_diameter=3.0, origin="svg"))
+    assert res.gcode.count("; Percorso") == 1                    # the marker itself is not cut
+    a, b = flat_segments(res.gcode, -2.0)
+    assert len(a) > 0
+    centre = np.array([30.0, -10.0])                            # marker centre in G-code coordinates (svg origin)
+    allpts = np.vstack([a, b])
+    assert np.hypot(*(allpts - centre).T).max() <= 3.0 + 1.5 + 0.05     # inside the marker grown by the tool radius
+    assert np.hypot(*(b - a).T).sum() > 6                       # a real tab, not a dot
+    assert sum(1 for l in res.gcode.splitlines() if l.startswith("G1 Z-2")) == 1       # a single tab
+
+
+def test_holes_get_no_auto_tabs_but_part_contours_do():
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" width="60mm" height="60mm" viewBox="0 0 60 60">'
+           '<path fill-rule="evenodd" d="M5,5 H55 V55 H5 Z M20,20 H40 V40 H20 Z"/></svg>')
+    d = parse_svg(svg)
+    res = cam.generate(d, [tab_op()], cam.Job(tool_diameter=2.0, origin="svg"))
+    assert res.gcode.count("; Percorso") == 2 and res.gcode.count("(con linguette)") == 1
+
+
+def test_tabs_are_ignored_for_pocket_engrave_and_when_invalid():
+    d = doc()
+    plain = cam.generate(d, [cam.Operation(kind="pocket", cut_depth=3, pass_depth=1.5)], cam.Job()).gcode
+    assert cam.generate(d, [cam.Operation(kind="pocket", cut_depth=3, pass_depth=1.5, tab_mode="auto")], cam.Job()).gcode == plain
+    base = cam.generate(d, [cam.Operation(kind="outside", cut_depth=3, pass_depth=1.5)], cam.Job())
+    bad = cam.generate(d, [tab_op(tab_height=3.0)], cam.Job())                 # as tall as the cut: nothing to cut
+    assert bad.gcode == base.gcode and any("linguette ignorate" in w for w in bad.warnings)
+    wide = cam.generate(d, [tab_op(width=10.0)], cam.Job())
+    assert any("una sola passata" in w for w in wide.warnings)
+    none = cam.generate(d, [tab_op(tab_mode="shapes", tab_shapes=set())], cam.Job())
+    assert none.gcode == base.gcode and any("nessuna forma linguetta" in w for w in none.warnings)
+    tiny = cam.generate(parse_svg('<svg xmlns="http://www.w3.org/2000/svg" width="20mm" height="20mm" viewBox="0 0 20 20">'
+                                  '<rect x="8" y="8" width="3" height="3"/></svg>'), [tab_op(tab_width=8.0)], cam.Job(tool_diameter=1.0))
+    assert any("troppo corto" in w for w in tiny.warnings) and "(con linguette)" not in tiny.gcode
+
+
+def test_tabs_with_ramp_never_cut_below_tab_height_in_the_tab():
+    d = doc()
+    res = cam.generate(d, [tab_op(ramp=True, cut_depth=3.0, pass_depth=3.0)], cam.Job(tool_diameter=3.0, origin="svg"))
+    assert not parse_program(res.gcode).warnings
+    a, b = flat_segments(res.gcode, -2.0)
+    assert np.hypot(*(b - a).T).sum() >= 4 * 4.0 - 0.1          # tabs on the final flat lap
+    p = parse_program(res.gcode)
+    assert p.bounds_min[2] == pytest.approx(-3.0, abs=1e-3)
+    # the ramp lap is still above/at tab height inside the tabs: count segments strictly between -3 and -2 that are
+    # ramp pieces (changing z) - they exist, and the lap ends at the start point
+    sl = p.path
+    ramp = (np.abs(sl.start[:, 2] - sl.end[:, 2]) > 1e-4) & (sl.kind == 1) & (np.hypot(*(sl.end[:, :2] - sl.start[:, :2]).T) > 1e-4)
+    assert ramp.sum() > 5
+
+
+def test_tabs_job_is_clean_for_the_sender():
+    d = parse_svg(open("examples/demo.svg").read())
+    res = cam.generate(d, [tab_op(shapes={"contorno"}, tab_count=6, cut_depth=3, pass_depth=1)], cam.Job())
+    prog = parse_program(res.gcode)
+    assert not prog.warnings and max(len(c) for _, c in prog.commands) <= 40
+    assert prog.bounds_min[2] == pytest.approx(-3.0, abs=1e-3) and res.gcode.splitlines()[-1] == "M2"

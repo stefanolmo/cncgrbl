@@ -43,6 +43,12 @@ class Operation:
     width: float = 0.0               # inside/outside band width; 0 = tool diameter (one pass)
     margin: float = 0.0              # extra offset of the geometry (outside: grow, inside: shrink)
     ramp: bool = False
+    # holding tabs (inside/outside only): the tool stays `tab_height` above the cut bottom along the tab
+    tab_mode: str = "none"           # none | auto (evenly spaced on each part contour) | shapes (SVG shapes mark the tabs)
+    tab_count: int = 4               # auto: tabs per part contour
+    tab_width: float = 4.0           # mm along the path
+    tab_height: float = 1.0          # mm of material left under the tab
+    tab_shapes: set[str] = field(default_factory=set)   # shapes mode: SVG shapes used as tab markers (not cut)
 
 
 @dataclass
@@ -257,6 +263,8 @@ def engrave(doc: SvgDoc, ids: set[str] | None, climb: bool) -> list[CamPath]:
 def build_paths(doc: SvgDoc, op: Operation, job: Job, warnings: list[str]) -> list[CamPath]:
     ids = op.shapes
     sel = [s for s in doc.shapes if ids is None or s.sid in ids]
+    if op.tab_mode == "shapes" and op.kind in ("inside", "outside"):
+        sel = [s for s in sel if s.sid not in op.tab_shapes]      # tab markers are not part of the cut
     if not sel:
         warnings.append(f"{op.name}: nessuna forma selezionata")
         return []
@@ -305,6 +313,103 @@ def _clean(points: np.ndarray, closed: bool, tol: float) -> np.ndarray:
             keep.append(i)
     pts = points[keep]
     return simplify(pts, tol, False) if len(pts) > 2 else pts
+
+
+def tabs_apply(op: Operation) -> bool:
+    return op.kind in ("inside", "outside") and op.tab_mode in ("auto", "shapes")
+
+
+def tab_zone(doc: SvgDoc, op: Operation, job: Job) -> list:
+    """Shapes mode: the marker shapes grown by the tool radius (so a marker centred on the part edge covers
+    the toolpath that runs one tool radius away from it)."""
+    polys = [shape_polygons(s) for s in doc.shapes if s.sid in op.tab_shapes]
+    union = combine(polys, "union")
+    return offset(union, job.tool_diameter / 2) if union else []
+
+
+def _nesting_depth(paths: list[CamPath]) -> list[int]:
+    """How many other closed paths of the same operation enclose each path (0 = outermost, 1 = inside a ring...)."""
+    clip = [_to_clip(p.points) if p.closed and len(p.points) >= 3 else None for p in paths]
+    depth = []
+    for i, p in enumerate(paths):
+        pt = (int(round(p.points[0][0] * SCALE)), int(round(p.points[0][1] * SCALE)))
+        depth.append(sum(1 for j, poly in enumerate(clip) if j != i and poly is not None
+                         and pyclipper.PointInPolygon(pt, poly) == 1))
+    return depth
+
+
+def split_for_tabs(pts: np.ndarray, inside_fn, step: float = 0.2):
+    """Cut a polyline where it enters/leaves a tab. `inside_fn(segment_index, t)` -> bool.
+
+    Returns (nodes, flags): nodes (N,2) including the boundary points; flags[i] is True when the piece
+    nodes[i] -> nodes[i+1] lies in a tab.
+    """
+    nodes = [pts[0]]
+    flags: list[bool] = []
+    for i in range(len(pts) - 1):
+        a, b = pts[i], pts[i + 1]
+        length = math.hypot(*(b - a))
+        n = max(1, int(math.ceil(length / step)))
+        mids = [(k + 0.5) / n for k in range(n)]
+        st = [inside_fn(i, t) for t in mids]
+        for k in range(1, n):
+            if st[k] != st[k - 1]:
+                lo, hi = mids[k - 1], mids[k]
+                for _ in range(14):               # bisection: where exactly does the state flip
+                    m = 0.5 * (lo + hi)
+                    if inside_fn(i, m) == st[k - 1]:
+                        lo = m
+                    else:
+                        hi = m
+                t = 0.5 * (lo + hi)
+                nodes.append(a + (b - a) * t)
+                flags.append(st[k - 1])
+        nodes.append(b)
+        flags.append(st[-1])
+    return np.array(nodes), flags
+
+
+def tab_plan(paths: list[CamPath], pts_list: list[np.ndarray], op: Operation, job: Job, zone: list,
+             warnings: list[str]):
+    """Per path: (nodes, flags) split at the tab boundaries, or None when the path gets no tabs."""
+    depth = _nesting_depth(paths) if op.tab_mode == "auto" else [0] * len(paths)
+    plans = []
+    warned_short = False
+    for cp, pts, dep in zip(paths, pts_list, depth):
+        if len(pts) < 3 or not cp.closed:
+            plans.append(None)
+            continue
+        seg = np.hypot(*np.diff(pts, axis=0).T)
+        cum = np.concatenate([[0.0], np.cumsum(seg)])
+        total = float(cum[-1])
+        if op.tab_mode == "auto":
+            if dep % 2 == 1:                      # holes / waste pieces: no tabs
+                plans.append(None)
+                continue
+            n = min(op.tab_count, int(0.5 * total / max(op.tab_width, 1e-6)))
+            if n < 1:
+                if not warned_short:
+                    warnings.append(f"{op.name}: contorno troppo corto per linguette da {op.tab_width:g} mm")
+                    warned_short = True
+                plans.append(None)
+                continue
+            centers = [(k + 0.5) * total / n for k in range(n)]
+            half = op.tab_width / 2
+
+            def inside(i, t, cum=cum, seg=seg, centers=centers, half=half):
+                s = cum[i] + t * seg[i]
+                return any(abs(s - c) <= half for c in centers)
+        else:
+            if not zone:
+                plans.append(None)
+                continue
+
+            def inside(i, t, pts=pts):
+                p = pts[i] + (pts[i + 1] - pts[i]) * t
+                return _inside_bounds(zone, p[0], p[1])
+        nodes, flags = split_for_tabs(pts, inside)
+        plans.append((nodes, flags) if any(flags) else None)
+    return plans
 
 
 def design_guides(doc: SvgDoc, job: Job, ids: set[str] | None = None) -> list[np.ndarray]:
@@ -356,6 +461,7 @@ def generate(doc: SvgDoc, ops: list[Operation], job: Job, source_name: str = "")
     if job.spindle:
         lines.append(f"M3 S{job.spindle_rpm:g}")
     cur_feed: float | None = None
+    zc: float = job.safe_z            # tracked tool Z: avoids redundant Z moves
     n_paths = 0
 
     def feed_word(f: float) -> str:
@@ -365,6 +471,41 @@ def generate(doc: SvgDoc, ops: list[Operation], job: Job, source_name: str = "")
         cur_feed = f
         return f" F{F(f)}"
 
+    def go_z(z: float) -> None:
+        nonlocal zc
+        if abs(z - zc) > 1e-9:
+            lines.append(f"G1 Z{Z(z)}{feed_word(job.plunge_feed)}")
+            zc = z
+
+    def emit_pass(nodes: np.ndarray, flags: list[bool], z_from: float, z_to: float, ramp: bool,
+                  tab_z: float | None) -> None:
+        """One lap along `nodes`. Z is constant z_to, or ramps from z_from to z_to along the lap. Where flags[i]
+        is True (a tab) the tool does not go below tab_z."""
+        nonlocal zc
+        seg = np.hypot(*np.diff(nodes, axis=0).T)
+        total = float(seg.sum())
+
+        def eff(z: float, in_tab: bool) -> float:
+            return max(z, tab_z) if (in_tab and tab_z is not None) else z
+
+        def z_at(acc: float) -> float:
+            return z_from + (z_to - z_from) * min(acc / total, 1.0) if (ramp and total > 1e-9) else z_to
+
+        go_z(eff(z_at(0.0), flags[0]))
+        acc = 0.0
+        for i in range(1, len(nodes)):
+            acc += float(seg[i - 1])
+            zn = z_at(acc)
+            za = eff(zn, flags[i - 1])
+            q = nodes[i]
+            if ramp and abs(za - zc) > 1e-9:
+                lines.append(f"G1 X{X(q[0])} Y{Y(q[1])} Z{Z(za)}{feed_word(job.cut_feed)}")
+                zc = za
+            else:
+                lines.append(f"G1 X{X(q[0])} Y{Y(q[1])}{feed_word(job.cut_feed)}")
+            if i < len(nodes) - 1:
+                go_z(eff(zn, flags[i]))      # entering / leaving a tab: vertical move at the boundary point
+
     for oi, op in enumerate(ops, 1):
         paths = build_paths(doc, op, job, res.warnings)
         if not paths:
@@ -373,51 +514,60 @@ def generate(doc: SvgDoc, ops: list[Operation], job: Job, source_name: str = "")
         top = 0.0
         bottom = -abs(op.cut_depth)
         pass_depth = max(abs(op.pass_depth), 0.01)
-        for pi, cp in enumerate(paths):
-            pts = _clean(cp.points, cp.closed, job.tolerance)
+        pts_list = [_clean(cp.points, cp.closed, job.tolerance) for cp in paths]
+        tab_z: float | None = None
+        plans: list = [None] * len(paths)
+        if tabs_apply(op):
+            if op.tab_height <= 0 or op.tab_height >= abs(op.cut_depth):
+                res.warnings.append(f"{op.name}: altezza linguette ({op.tab_height:g} mm) non valida per una "
+                                    f"profondità di {abs(op.cut_depth):g} mm: linguette ignorate")
+            elif op.width > job.tool_diameter + 1e-9:
+                res.warnings.append(f"{op.name}: le linguette richiedono una sola passata (larghezza = diametro utensile)")
+            else:
+                tab_z = bottom + op.tab_height
+                zone = tab_zone(doc, op, job) if op.tab_mode == "shapes" else []
+                if op.tab_mode == "shapes" and not zone:
+                    res.warnings.append(f"{op.name}: nessuna forma linguetta selezionata")
+                plans = tab_plan(paths, pts_list, op, job, zone, res.warnings)
+                if not any(plans) and op.tab_mode == "shapes" and zone:
+                    res.warnings.append(f"{op.name}: le forme linguetta non toccano il percorso")
+        for pi, (cp, pts, plan) in enumerate(zip(paths, pts_list, plans)):
             if len(pts) < 2:
                 continue
             n_paths += 1
-            start = pts[0]
-            lines.append(f"; Percorso {pi}")
+            nodes, flags = plan if plan else (pts, [False] * (len(pts) - 1))
+            start = nodes[0]
+            lines.append(f"; Percorso {pi}" + (" (con linguette)" if plan else ""))
             lines.append(f"G0 X{X(start[0])} Y{Y(start[1])}")
+            zc = job.safe_z
             if job.approach_z < job.safe_z:
                 lines.append(f"G0 Z{Z(job.approach_z)}")
-            seg_len = np.hypot(*np.diff(pts, axis=0).T)
-            total_len = float(seg_len.sum())
-            cur_z = top
+                zc = job.approach_z
+            use_tabs = tab_z if plan else None
+            total_len = float(np.hypot(*np.diff(nodes, axis=0).T).sum())
             forward = True
-            at_start = True
             finished = top
             while finished > bottom + 1e-9:
                 next_z = max(finished - pass_depth, bottom)
-                walk = pts if forward else pts[::-1]
+                walk = nodes if forward else nodes[::-1]
+                wflags = flags if forward else flags[::-1]
                 if op.ramp and total_len > 1e-6:
                     # jscut ramp plunge: descend linearly along one lap, then a flat lap at the final depth
-                    if at_start:
-                        lines.append(f"G1 Z{Z(cur_z)}{feed_word(job.plunge_feed)}")
-                    acc = 0.0
-                    for j in range(1, len(walk)):
-                        acc += math.hypot(*(walk[j] - walk[j - 1]))
-                        z = cur_z + (next_z - cur_z) * min(acc / total_len, 1.0)
-                        lines.append(f"G1 X{X(walk[j][0])} Y{Y(walk[j][1])} Z{Z(z)}{feed_word(job.cut_feed)}")
+                    emit_pass(walk, wflags, finished, next_z, True, use_tabs)
                     if next_z <= bottom + 1e-9:
                         # final depth reached: one flat lap (closed) / flat return (open) removes the slope
                         back = walk if cp.closed else walk[::-1]
-                        for q in back[1:]:
-                            lines.append(f"G1 X{X(q[0])} Y{Y(q[1])}{feed_word(job.cut_feed)}")
+                        bflags = wflags if cp.closed else wflags[::-1]
+                        emit_pass(back, bflags, bottom, bottom, False, use_tabs)
                     elif not cp.closed:
                         forward = not forward
-                    at_start = False
                 else:
-                    lines.append(f"G1 Z{Z(next_z)}{feed_word(job.plunge_feed)}")
-                    for q in walk[1:]:
-                        lines.append(f"G1 X{X(q[0])} Y{Y(q[1])}{feed_word(job.cut_feed)}")
+                    emit_pass(walk, wflags, next_z, next_z, False, use_tabs)
                     if not cp.closed:
                         forward = not forward      # open path: cut back and forth, no lift between passes
-                cur_z = next_z
                 finished = next_z
             lines.append(f"G0 Z{Z(job.safe_z)}")
+            zc = job.safe_z
     res.guides = design_guides(doc, job, ids_all or None)
     res.n_paths = n_paths
     if n_paths == 0:

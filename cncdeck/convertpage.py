@@ -17,6 +17,7 @@ from .widgets import Card, CodeEditor
 
 KINDS = [("outside", "Esterno (profilo fuori)"), ("inside", "Interno (profilo dentro)"),
          ("pocket", "Tasca (svuotamento)"), ("engrave", "Incisione (linea centrale)")]
+TABMODES = [("none", "Nessuna"), ("auto", "Automatiche (equidistanti)"), ("shapes", "Da forme SVG (segnaposto)")]
 COMBINE = [("union", "Unione"), ("intersect", "Intersezione"), ("diff", "Differenza"), ("xor", "XOR")]
 ORIGINS = [("top-left", "Angolo alto-sinistro del disegno"), ("bottom-left", "Angolo basso-sinistro del disegno"),
            ("svg", "Origine della pagina SVG (come jscut)")]
@@ -152,6 +153,17 @@ class ConverterPage(QWidget):
         self.w_width = _dspin(0, 100, 0.0, 2, " mm", 0.5)
         self.w_margin = _dspin(-20, 20, 0.0, 2, " mm", 0.1)
         self.w_ramp = QCheckBox("Entrata a rampa (invece del tuffo verticale)")
+        self.w_tabmode = _combo(TABMODES)
+        self.w_tabcount = QSpinBox()
+        self.w_tabcount.setRange(1, 50)
+        self.w_tabcount.setValue(4)
+        self.w_tabw = _dspin(0.5, 100, 4.0, 1, " mm", 0.5)
+        self.w_tabh = _dspin(0.1, 50, 1.0, 2, " mm", 0.1)
+        self.w_tabmode.setToolTip("Linguette di fissaggio: lungo il taglio dei contorni la fresa resta alta, così il pezzo non si stacca "
+                                  "e non si muove. Solo per Esterno/Interno. Poi si tagliano con il seghetto/bisturi.")
+        self.w_tabcount.setToolTip("Automatiche: numero di linguette su ogni contorno di pezzo (i fori non ne hanno)")
+        self.w_tabw.setToolTip("Lunghezza di ogni linguetta lungo il percorso")
+        self.w_tabh.setToolTip("Altezza di materiale lasciata sotto la linguetta (dal fondo del taglio)")
         self.w_cut.setToolTip("Profondità totale sotto la superficie del materiale (Z = 0)")
         self.w_step.setToolTip("Distanza tra passate affiancate, in % del diametro utensile (jscut: step over)")
         self.w_width.setToolTip("Larghezza della fascia lavorata per Esterno/Interno; 0 = una sola passata (= diametro utensile)")
@@ -164,6 +176,21 @@ class ConverterPage(QWidget):
             g.addWidget(w, i, 1)
         c.body.addLayout(g)
         c.body.addWidget(self.w_ramp)
+        tg = QGridLayout()
+        tg.setHorizontalSpacing(8)
+        tg.setVerticalSpacing(6)
+        self.tab_widgets = [(QLabel("Linguette"), self.w_tabmode), (QLabel("  Numero"), self.w_tabcount),
+                            (QLabel("  Larghezza"), self.w_tabw), (QLabel("  Altezza"), self.w_tabh)]
+        for i, (lab, w) in enumerate(self.tab_widgets):
+            tg.addWidget(lab, i, 0)
+            tg.addWidget(w, i, 1)
+        c.body.addLayout(tg)
+        self.tab_shapes_label = QLabel("Forme usate come linguette (non vengono fresate)")
+        self.tab_shape_list = QListWidget()
+        self.tab_shape_list.setMaximumHeight(100)
+        self.tab_shape_list.itemChanged.connect(self._tabshapes_changed)
+        c.body.addWidget(self.tab_shapes_label)
+        c.body.addWidget(self.tab_shape_list)
         c.body.addWidget(QLabel("Forme usate da questa operazione"))
         self.shape_list = QListWidget()
         self.shape_list.setMaximumHeight(120)
@@ -174,8 +201,10 @@ class ConverterPage(QWidget):
             w.textEdited.connect(self._op_edited)
         for w in (self.w_kind, self.w_combine, self.w_dir):
             w.currentIndexChanged.connect(self._op_edited)
-        for w in (self.w_cut, self.w_pass, self.w_step, self.w_width, self.w_margin):
+        for w in (self.w_cut, self.w_pass, self.w_step, self.w_width, self.w_margin, self.w_tabw, self.w_tabh):
             w.valueChanged.connect(self._op_edited)
+        self.w_tabcount.valueChanged.connect(self._op_edited)
+        self.w_tabmode.currentIndexChanged.connect(self._op_edited)
         self.w_ramp.toggled.connect(self._op_edited)
 
         # --- tool & job
@@ -316,6 +345,7 @@ class ConverterPage(QWidget):
     def _fill_shape_list(self) -> None:
         self._loading = True
         self.shape_list.clear()
+        self.tab_shape_list.clear()
         op = self.cur_op()
         if self.doc and op:
             for s in self.doc.shapes:
@@ -324,7 +354,13 @@ class ConverterPage(QWidget):
                 it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
                 it.setCheckState(Qt.Checked if (op.shapes is None or s.sid in op.shapes) else Qt.Unchecked)
                 self.shape_list.addItem(it)
+                tt = QListWidgetItem(f"{s.label}  ({s.kind})")
+                tt.setData(Qt.UserRole, s.sid)
+                tt.setFlags(tt.flags() | Qt.ItemIsUserCheckable)
+                tt.setCheckState(Qt.Checked if s.sid in op.tab_shapes else Qt.Unchecked)
+                self.tab_shape_list.addItem(tt)
         self._loading = False
+        self._update_tab_widgets()
 
     # ------------------------------------------------------------------ operations model <-> widgets
     def cur_op(self) -> cam.Operation | None:
@@ -354,6 +390,9 @@ class ConverterPage(QWidget):
         for w in (self.w_name, self.w_kind, self.w_combine, self.w_dir, self.w_cut, self.w_pass, self.w_step,
                   self.w_width, self.w_margin, self.w_ramp, self.shape_list):
             w.setEnabled(en)
+        if not en:
+            for w in (self.w_tabmode, self.w_tabcount, self.w_tabw, self.w_tabh):
+                w.setEnabled(False)
         if op:
             self.w_name.setText(op.name)
             self.w_kind.setCurrentIndex(self.w_kind.findData(op.kind))
@@ -365,6 +404,10 @@ class ConverterPage(QWidget):
             self.w_width.setValue(op.width)
             self.w_margin.setValue(op.margin)
             self.w_ramp.setChecked(op.ramp)
+            self.w_tabmode.setCurrentIndex(self.w_tabmode.findData(op.tab_mode))
+            self.w_tabcount.setValue(op.tab_count)
+            self.w_tabw.setValue(op.tab_width)
+            self.w_tabh.setValue(op.tab_height)
         self._loading = False
         self._fill_shape_list()
 
@@ -385,7 +428,32 @@ class ConverterPage(QWidget):
         op.width = self.w_width.value()
         op.margin = self.w_margin.value()
         op.ramp = self.w_ramp.isChecked()
+        op.tab_mode = self.w_tabmode.currentData()
+        op.tab_count = self.w_tabcount.value()
+        op.tab_width = self.w_tabw.value()
+        op.tab_height = self.w_tabh.value()
+        self._update_tab_widgets()
         self.ops_list.item(self.ops_list.currentRow()).setText(self._op_label(self.ops_list.currentRow()))
+        self._schedule()
+
+    def _update_tab_widgets(self) -> None:
+        """Tabs only make sense for Esterno/Interno; the count is for automatic tabs, the marker list for shapes mode."""
+        op = self.cur_op()
+        applicable = op is not None and op.kind in ("inside", "outside")
+        mode = op.tab_mode if (op is not None and applicable) else "none"
+        self.w_tabmode.setEnabled(applicable)
+        self.w_tabcount.setEnabled(mode == "auto")
+        self.w_tabw.setEnabled(mode != "none")
+        self.w_tabh.setEnabled(mode != "none")
+        self.tab_shape_list.setVisible(mode == "shapes")
+        self.tab_shapes_label.setVisible(mode == "shapes")
+
+    def _tabshapes_changed(self, _item) -> None:
+        op = self.cur_op()
+        if self._loading or op is None:
+            return
+        op.tab_shapes = {self.tab_shape_list.item(i).data(Qt.UserRole) for i in range(self.tab_shape_list.count())
+                         if self.tab_shape_list.item(i).checkState() == Qt.Checked}
         self._schedule()
 
     def _shapes_changed(self, _item) -> None:
@@ -460,6 +528,8 @@ class ConverterPage(QWidget):
             self._show_result(cam.CamResult(warnings=list(self.doc.warnings) if self.doc else []), None)
             return
         self._serial += 1                 # also invalidates any computation still running
+        self._dirty = True                # the previous G-code is stale until the new one arrives
+        self._update_buttons()
         if not self.ops:
             self._show_result(cam.CamResult(guides=cam.design_guides(self.doc, self.job())), None)
             return

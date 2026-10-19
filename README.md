@@ -51,7 +51,12 @@ stessa libreria geometrica di jscut) e `svgelements` (trasformazioni, unità, vi
 - Il mandrino **non** viene acceso di default (come jscut): usa il pulsante Mandrino del Sender oppure attiva M3/M5 nel convertitore.
 - «Invia alla CNC» **non avvia** il lavoro: porta il programma nel Sender e passa a quella modalità; controlla lo zero e premi Avvia.
 
-Non implementati rispetto a jscut: *V-pocket*, *tabs* di fissaggio, Z origin dal fondo del materiale, conversione da testo SVG (converti in tracciati).
+- **Linguette di fissaggio** (solo Esterno/Interno): lungo il taglio la fresa resta a `Altezza` mm dal fondo, così il pezzo non si stacca
+  né si muove. *Automatiche*: N linguette equidistanti sul contorno di ogni pezzo (i fori non ne hanno). *Da forme SVG*: disegna un
+  piccolo cerchio/rettangolo a cavallo del bordo e marcalo come linguetta; la forma non viene fresata e copre il percorso a un
+  raggio utensile da lei. Richiedono una sola passata laterale (larghezza = diametro utensile) e un'altezza minore della profondità.
+
+Non implementati rispetto a jscut: *V-pocket*, Z origin dal fondo del materiale, conversione da testo SVG (converti in tracciati).
 
 Non implementato (rispetto a Candle): **height map / autolivellamento**. Il viewer assume programmi in coordinate
 assolute (G90) che partono dallo zero pezzo; un programma solo-G91 viene disegnato a partire da 0,0,0.

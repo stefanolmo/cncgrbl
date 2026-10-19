@@ -1,6 +1,7 @@
 import time
 
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QInputDialog, QMessageBox
 
 from cncdeck import simulator, theme
@@ -416,3 +417,71 @@ def test_operation_with_no_selected_shapes_produces_no_gcode(win):
     assert pump(lambda: c.result is not None and not c._dirty and c.result.gcode == "", 10)
     assert not c.btn_send.isEnabled()
     assert any("nessuna forma" in m.lower() or "Nessun percorso" in m for m in c.messages.toPlainText().splitlines())
+
+
+# ---------------------------------------------------------------- holding tabs in the converter UI
+def _conv_with_op(win, svg="examples/demo.svg"):
+    win.set_mode(1)
+    c = win.converter
+    assert c.load_svg(svg)
+    c._add_op()
+    c.cur_op().shapes = {"contorno"}
+    c.w_cut.setValue(3.0)
+    c.w_pass.setValue(1.5)
+    return c
+
+
+def test_tab_controls_follow_the_operation_kind_and_mode(win):
+    c = _conv_with_op(win)
+    assert c.w_tabmode.isEnabled() and not c.w_tabcount.isEnabled() and not c.tab_shape_list.isVisibleTo(c)
+    c.w_tabmode.setCurrentIndex(c.w_tabmode.findData("auto"))
+    assert c.cur_op().tab_mode == "auto" and c.w_tabcount.isEnabled() and c.w_tabw.isEnabled() and c.w_tabh.isEnabled()
+    c.w_tabmode.setCurrentIndex(c.w_tabmode.findData("shapes"))
+    assert not c.w_tabcount.isEnabled() and c.tab_shape_list.isVisibleTo(c) and c.tab_shape_list.count() == 4
+    c.w_kind.setCurrentIndex(c.w_kind.findData("pocket"))                      # tabs make no sense for a pocket
+    assert not c.w_tabmode.isEnabled() and not c.w_tabw.isEnabled() and not c.tab_shape_list.isVisibleTo(c)
+    c.w_kind.setCurrentIndex(c.w_kind.findData("outside"))
+    assert c.w_tabmode.isEnabled() and c.cur_op().tab_mode == "shapes"         # the setting is kept
+
+
+def test_auto_tabs_end_up_in_the_gcode_and_the_sender(win):
+    import re
+    c = _conv_with_op(win)
+    c.w_tabmode.setCurrentIndex(c.w_tabmode.findData("auto"))
+    c.w_tabcount.setValue(5)
+    c.w_tabw.setValue(3.0)
+    c.w_tabh.setValue(1.0)
+    assert pump(lambda: c.btn_send.isEnabled() and "(con linguette)" in c.result.gcode, 30)
+    lifts = [l for l in c.result.gcode.splitlines() if l.startswith("G1 Z-2")]
+    assert len(lifts) == 5                                                       # 5 tabs on the one contour
+    c.btn_send.click()
+    assert pump(lambda: win.program is not None and len(win.program.commands) > 10, 20)
+    assert not win.program.warnings and win.mode == 0
+    assert re.search(r"G1Z-2", " ".join(cmd for _, cmd in win.program.commands))   # reaches the sender as is
+
+
+def test_shape_marker_is_a_tab_not_a_cut(win, tmp_path):
+    svg = tmp_path / "marker.svg"
+    svg.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="60mm" viewBox="0 0 100 60">'
+                   '<rect id="part" x="10" y="10" width="40" height="30"/><circle id="mark" cx="30" cy="10" r="3"/>'
+                   '<rect id="other" x="70" y="10" width="20" height="20"/></svg>')
+    win.set_mode(1)
+    c = win.converter
+    assert c.load_svg(str(svg))
+    c._add_op()
+    c.w_cut.setValue(3.0)
+    c.w_pass.setValue(1.5)
+    c.w_tabmode.setCurrentIndex(c.w_tabmode.findData("shapes"))
+    for i in range(c.tab_shape_list.count()):
+        if c.tab_shape_list.item(i).data(Qt.UserRole) == "mark":
+            c.tab_shape_list.item(i).setCheckState(Qt.Checked)
+    assert c.cur_op().tab_shapes == {"mark"}
+    assert pump(lambda: c.btn_send.isEnabled() and not c._dirty, 30)
+    g = c.result.gcode
+    # 'part' and 'other' are cut (the marker circle merges into 'part' only if it were a cut shape): 2 paths, 1 tab
+    assert g.count("; Percorso") == 2 and g.count("(con linguette)") == 1
+    c.cur_op().tab_shapes = set()                                                # no marker any more: nothing excluded
+    c.cur_op().tab_mode = "none"
+    c.generate_now()
+    assert pump(lambda: c.btn_send.isEnabled() and not c._dirty, 30)
+    assert "(con linguette)" not in c.result.gcode
