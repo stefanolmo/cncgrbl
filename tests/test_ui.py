@@ -251,6 +251,7 @@ def test_mode_switch_keeps_sender_and_shows_converter(win):
 def _convert_demo(win):
     win.set_mode(1)
     assert win.converter.load_svg("examples/demo.svg")
+    win.converter._add_op()                                  # the list starts empty: create one operation
     assert pump(lambda: win.converter.program is not None and not win.converter._dirty, 30)
     return win.converter
 
@@ -274,6 +275,7 @@ def test_send_to_cnc_loads_sender_in_memory_without_files(win, tmp_path, monkeyp
     (tmp_path / "in.svg").write_text(svg)
     win.set_mode(1)
     assert win.converter.load_svg(str(tmp_path / "in.svg"))
+    win.converter._add_op()
     assert pump(lambda: win.converter.program is not None and not win.converter._dirty, 30)
     gcode = win.converter.result.gcode
     win.converter.btn_send.click()
@@ -370,3 +372,47 @@ def test_settings_dialog_keeps_user_edits_when_refreshed(win):
     dlg.applyRequested.connect(got.append)
     dlg._apply()
     assert got == [["$110=1500"]]
+
+
+def test_converter_starts_with_no_operations_and_nothing_to_send(win):
+    from PySide6.QtWidgets import QApplication
+    win.set_mode(1)
+    c = win.converter
+    assert c.ops == [] and c.ops_list.count() == 0 and c.cur_op() is None
+    assert not c.btn_gen.isEnabled() and not c.btn_send.isEnabled() and not c.btn_save.isEnabled()
+    assert not c.w_kind.isEnabled() and not any(b.isEnabled() for b in c._op_btns)   # nothing to edit/duplicate/remove
+    assert c.load_svg("examples/demo.svg")
+    assert pump(lambda: c.result is not None, 10)
+    assert c.ops == [] and c.result.gcode == "" and c.editor.toPlainText() == ""     # no G-code invented for the user
+    assert not c.btn_send.isEnabled() and not c.btn_save.isEnabled()
+    assert len(c.view.guides) >= 4 and c.view.program is None                        # but the design is shown
+    assert "Nessuna operazione" in c.summary.text()
+    c.btn_send.click()                                                               # disabled: must do nothing
+    assert win.mode == 1 and win.program is None
+    QApplication.instance().processEvents()
+
+
+def test_converter_add_and_remove_last_operation(win):
+    c = win.converter
+    win.set_mode(1)
+    assert c.load_svg("examples/demo.svg")
+    c._add_op()
+    assert c.ops_list.count() == 1 and c.w_kind.isEnabled() and all(b.isEnabled() for b in c._op_btns)
+    assert pump(lambda: c.program is not None and not c._dirty and c.btn_send.isEnabled(), 30)
+    c._del_op()                                                                      # the last one can be removed
+    assert c.ops == [] and c.ops_list.count() == 0
+    assert pump(lambda: c.result is not None and c.result.gcode == "" and not c._dirty, 10)
+    assert not c.btn_send.isEnabled() and not c.btn_save.isEnabled() and c.program is None
+    assert len(c.view.guides) >= 4
+
+
+def test_operation_with_no_selected_shapes_produces_no_gcode(win):
+    c = win.converter
+    win.set_mode(1)
+    assert c.load_svg("examples/demo.svg")
+    c._add_op()
+    c.cur_op().shapes = set()                                                         # nothing selected
+    c.generate_now()
+    assert pump(lambda: c.result is not None and not c._dirty and c.result.gcode == "", 10)
+    assert not c.btn_send.isEnabled()
+    assert any("nessuna forma" in m.lower() or "Nessun percorso" in m for m in c.messages.toPlainText().splitlines())

@@ -52,6 +52,7 @@ class ToolpathView(QWidget):
         self.show_rapids = True
         self.show_envelope = False
         self.guides: list = []
+        self.empty_message = "Apri un file G-code per vedere il percorso\n(trascina qui un file .nc / .gcode)"
         self.envelope: tuple[np.ndarray, np.ndarray] | None = None  # (min,max) in work coords
         self._drag = None
         self._cache_key = None
@@ -141,6 +142,10 @@ class ToolpathView(QWidget):
             hi = np.array(self.program.bounds_max)
             lo = np.minimum(lo, 0.0)
             hi = np.maximum(hi, 0.0)
+        elif self.guides:
+            allp = np.concatenate([np.asarray(g, float) for g in self.guides])
+            lo = np.minimum(allp.min(axis=0), 0.0) - [0, 0, 5]
+            hi = np.maximum(allp.max(axis=0), 0.0) + [0, 0, 10]
         return lo, hi
 
     def fit(self, keep_angles: bool = False) -> None:
@@ -414,7 +419,7 @@ class ToolpathView(QWidget):
         if self.program is None or not len(self.program.path):
             p.setFont(QFont("sans", 13))
             p.setPen(QColor(255, 255, 255, 90))
-            p.drawText(self.rect(), Qt.AlignCenter, "Apri un file G-code per vedere il percorso\n(trascina qui un file .nc / .gcode)")
+            p.drawText(self.rect(), Qt.AlignCenter, self.empty_message)
         else:
             lo, hi = self.program.bounds_min, self.program.bounds_max
             p.drawText(QPointF(12, self.height() - 12),

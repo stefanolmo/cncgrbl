@@ -122,6 +122,21 @@ def test_holes_respect_fill_rule_and_combine():
     assert ib[:, 0].min() == pytest.approx(19, abs=0.05) and ib[:, 0].max() == pytest.approx(31, abs=0.05)
 
 
+def test_no_paths_means_no_gcode_at_all():
+    d = doc()
+    assert cam.generate(d, [], cam.Job()).gcode == ""                                  # no operations
+    r = cam.generate(d, [cam.Operation(kind="inside")], cam.Job(tool_diameter=40))     # tool too big: no path
+    assert r.gcode == "" and r.n_paths == 0 and r.warnings
+    r = cam.generate(d, [cam.Operation(kind="outside", shapes=set())], cam.Job())      # nothing selected
+    assert r.gcode == "" and r.guides is not None
+
+
+def test_design_guides_follow_origin_convention():
+    d = doc()
+    g = cam.design_guides(d, cam.Job(origin="top-left"))
+    assert len(g) == 1 and g[0][:, 0].min() == 0 and g[0][:, 1].max() == 0 and g[0][:, 2].max() == 0
+
+
 def test_tool_too_big_warns():
     res = cam.generate(doc(), [cam.Operation(kind="inside")], cam.Job(tool_diameter=40))
     assert any("troppo grande" in w for w in res.warnings)

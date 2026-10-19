@@ -39,7 +39,7 @@ Senza installare: `pip install -r requirements.txt && python3 -m cncdeck`.
 Approccio di [jscut](https://github.com/tbfleming/jscut), riscritto in Python con `pyclipper` (binding di Clipper, la
 stessa libreria geometrica di jscut) e `svgelements` (trasformazioni, unità, viewBox):
 
-- **Operazioni** (anche più d'una, in sequenza): *Esterno*, *Interno*, *Tasca*, *Incisione* (linea centrale, anche tracciati aperti);
+- **Operazioni** (si parte con la lista vuota, come in jscut: le crei tu con «＋ Aggiungi»; anche più d'una, in sequenza): *Esterno*, *Interno*, *Tasca*, *Incisione* (linea centrale, anche tracciati aperti);
   per ognuna: forme usate, combinazione (unione / intersezione / differenza / XOR), direzione (convenzionale / concorde, per mandrino
   orario), profondità totale e per passata, step over, larghezza della fascia, margine, entrata a rampa.
 - **Utensile**: diametro, avanzamento di taglio e di tuffo, Z di sicurezza, M3/M5 opzionali, unità del G-code (mm o pollici), posizione dello zero.

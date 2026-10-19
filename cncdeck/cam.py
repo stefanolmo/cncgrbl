@@ -307,6 +307,18 @@ def _clean(points: np.ndarray, closed: bool, tol: float) -> np.ndarray:
     return simplify(pts, tol, False) if len(pts) > 2 else pts
 
 
+def design_guides(doc: SvgDoc, job: Job, ids: set[str] | None = None) -> list[np.ndarray]:
+    """Outlines of the design in G-code coordinates (flat at Z=0), using the job's origin convention."""
+    ox, oy = origin_offset(doc, ids, job.origin)
+    out = []
+    for s in doc.shapes:
+        if ids is None or s.sid in ids:
+            for sp in s.subpaths:
+                p = np.vstack([sp.points, sp.points[:1]]) if sp.closed else sp.points
+                out.append(np.column_stack([p[:, 0] - ox, -(p[:, 1] - oy), np.zeros(len(p))]))
+    return out
+
+
 def generate(doc: SvgDoc, ops: list[Operation], job: Job, source_name: str = "") -> CamResult:
     res = CamResult()
     if not doc.shapes:
@@ -406,17 +418,14 @@ def generate(doc: SvgDoc, ops: list[Operation], job: Job, source_name: str = "")
                 cur_z = next_z
                 finished = next_z
             lines.append(f"G0 Z{Z(job.safe_z)}")
+    res.guides = design_guides(doc, job, ids_all or None)
+    res.n_paths = n_paths
+    if n_paths == 0:
+        # nothing to cut: never hand a header-only program to the sender
+        res.warnings.append("Nessun percorso generato")
+        return res
     if job.spindle:
         lines.append("M5")
     lines.append("M2")
     res.gcode = "\n".join(lines) + "\n"
-    res.n_paths = n_paths
-    # guides: the design outlines in machine coordinates (flat at Z=0, in mm)
-    for s in doc.shapes:
-        if s.sid in ids_all:
-            for sp in s.subpaths:
-                p = sp.points
-                if sp.closed:
-                    p = np.vstack([p, p[:1]])
-                res.guides.append(np.column_stack([p[:, 0] - ox, -(p[:, 1] - oy), np.zeros(len(p))]))
     return res

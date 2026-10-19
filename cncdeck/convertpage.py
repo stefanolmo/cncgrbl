@@ -66,7 +66,7 @@ class ConverterPage(QWidget):
         self.qs = QSettings("cncdeck", "cncdeck")
         self.doc: SvgDoc | None = None
         self.svg_path: str | None = None
-        self.ops: list[cam.Operation] = [cam.Operation(name="Profilo esterno")]
+        self.ops: list[cam.Operation] = []          # starts empty, like jscut: the user creates the operations
         self.result: cam.CamResult | None = None
         self.program: Program | None = None
         self._serial = 0
@@ -129,11 +129,15 @@ class ConverterPage(QWidget):
         self.ops_list.currentRowChanged.connect(self._op_selected)
         c.body.addWidget(self.ops_list)
         row = QHBoxLayout()
-        for text, slot in (("＋ Aggiungi", self._add_op), ("Duplica", self._dup_op), ("Rimuovi", self._del_op),
-                           ("▲", lambda: self._move_op(-1)), ("▼", lambda: self._move_op(1))):
+        self._op_btns: list[QPushButton] = []       # need an existing operation to act on
+        for i, (text, slot) in enumerate((("＋ Aggiungi", self._add_op), ("Duplica", self._dup_op),
+                                          ("Rimuovi", self._del_op), ("▲", lambda: self._move_op(-1)),
+                                          ("▼", lambda: self._move_op(1)))):
             bt = QPushButton(text)
             bt.clicked.connect(slot)
             row.addWidget(bt)
+            if i:
+                self._op_btns.append(bt)
         c.body.addLayout(row)
         g = QGridLayout()
         g.setHorizontalSpacing(8)
@@ -340,6 +344,8 @@ class ConverterPage(QWidget):
             self.ops_list.addItem(self._op_label(i))
         self.ops_list.setCurrentRow(max(0, min(keep, len(self.ops) - 1)) if self.ops else -1)
         self.ops_list.blockSignals(False)
+        for b in self._op_btns:
+            b.setEnabled(bool(self.ops))
 
     def _load_op_widgets(self) -> None:
         op = self.cur_op()
@@ -392,7 +398,7 @@ class ConverterPage(QWidget):
         self._schedule()
 
     def _add_op(self) -> None:
-        self.ops.append(cam.Operation(name=f"Operazione {len(self.ops) + 1}", kind="pocket"))
+        self.ops.append(cam.Operation(name=f"Operazione {len(self.ops) + 1}", kind="outside"))
         self._refresh_ops_list(len(self.ops) - 1)
         self._load_op_widgets()
         self._schedule()
@@ -409,7 +415,7 @@ class ConverterPage(QWidget):
 
     def _del_op(self) -> None:
         i = self.ops_list.currentRow()
-        if len(self.ops) > 1 and 0 <= i < len(self.ops):
+        if 0 <= i < len(self.ops):
             del self.ops[i]
             self._refresh_ops_list(max(0, i - 1))
             self._load_op_widgets()
@@ -453,7 +459,10 @@ class ConverterPage(QWidget):
         if self.doc is None or not self.doc.shapes:
             self._show_result(cam.CamResult(warnings=list(self.doc.warnings) if self.doc else []), None)
             return
-        self._serial += 1
+        self._serial += 1                 # also invalidates any computation still running
+        if not self.ops:
+            self._show_result(cam.CamResult(guides=cam.design_guides(self.doc, self.job())), None)
+            return
         self.summary.setText("Calcolo del percorso…")
         t = GenThread(self.doc, copy.deepcopy(self.ops), self.job(), os.path.basename(self.svg_path or ""),
                       self._serial, self)
@@ -472,9 +481,13 @@ class ConverterPage(QWidget):
         self._dirty = False
         self.editor.setPlainText(res.gcode)
         self.view.set_guides(res.guides)
+        self.view.empty_message = ("Aggiungi un'operazione (＋ Aggiungi) per generare il percorso utensile" if self.doc
+                                   else "Apri un file SVG")
         self.view.set_program(prog, fit=self._fit_next)
         if prog is not None and len(prog.path):
             self._fit_next = False
+        elif res.guides:
+            self.view.fit()               # no toolpath yet: frame the design itself
         msgs = list(self.doc.warnings if self.doc else []) + res.warnings + (prog.warnings if prog else [])
         if prog is not None:
             sz = prog.size
@@ -482,6 +495,8 @@ class ConverterPage(QWidget):
                     f"tempo stimato ≈ {format_duration(prog.total_time)}")
             self.summary.setText(info + (f"\n⚠ {len(msgs)} avvisi (scheda Messaggi)" if msgs else ""))
             msgs.insert(0, info)
+        elif not self.ops and self.doc is not None:
+            self.summary.setText("Nessuna operazione: premi «＋ Aggiungi» per crearne una")
         else:
             self.summary.setText("Nessun G-code generato" + (" — vedi Messaggi" if msgs else ""))
         self.messages.setPlainText("\n".join(msgs))
@@ -491,7 +506,7 @@ class ConverterPage(QWidget):
         ok = bool(self.result and self.result.gcode) and not self._dirty
         self.btn_save.setEnabled(ok)
         self.btn_send.setEnabled(ok)
-        self.btn_gen.setEnabled(self.doc is not None)
+        self.btn_gen.setEnabled(self.doc is not None and bool(self.ops))
 
     # ------------------------------------------------------------------ output
     def suggested_name(self) -> str:

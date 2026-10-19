@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cncdeck"
-version = "0.4.1"
+version = "0.4.2"
 description = "Sender G-code per CNC GRBL 1.1 (CNC 1610 Pro e simili) con viewer 3D"
 readme = "README.md"
 requires-python = ">=3.10"
