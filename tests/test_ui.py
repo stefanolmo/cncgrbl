@@ -306,3 +306,52 @@ def test_sender_arrows_unaffected_by_converter(win):
     win.set_mode(1)
     win.set_mode(0)
     assert _press_pad(win, 0) == pytest.approx(5.0, abs=0.01)                  # still: up arrow -> Y+
+
+
+# ---------------------------------------------------------------- splash screen
+def test_splash_lasts_its_duration_then_signals_and_has_the_texts(monkeypatch):
+    from PySide6.QtWidgets import QApplication
+    from cncdeck import __version__
+    from cncdeck.splash import CREDITS, SplashScreen
+    QApplication.instance() or QApplication([])
+    assert CREDITS == "Stefano Ciurleo & Claude Code - 2026"
+    drawn = []
+    from PySide6.QtGui import QPainter
+    orig = QPainter.drawText
+    monkeypatch.setattr(QPainter, "drawText", lambda self, *a: (drawn.append(a[-1]) if isinstance(a[-1], str) else None, orig(self, *a))[1])
+    s = SplashScreen(__version__, duration_ms=3000)
+    done = []
+    s.finished.connect(lambda: done.append(time.time()))
+    t0 = time.time()
+    s.start()
+    assert pump(lambda: done, 6)
+    assert 2.9 <= done[0] - t0 <= 3.6                           # 3 seconds
+    assert not s.isVisible()
+    assert any(CREDITS in str(x) for x in drawn) and any(__version__ in str(x) for x in drawn)
+    assert any(str(x) == "CNC" for x in drawn) and any(str(x) == "Deck" for x in drawn)
+
+
+def test_cli_splash_can_be_disabled_and_window_opens_after_it(monkeypatch, tmp_path):
+    from PySide6.QtWidgets import QApplication
+    from cncdeck import __main__ as entry
+    app = QApplication.instance() or QApplication([])
+    seen = {}
+    monkeypatch.setattr(entry.SplashScreen, "start", lambda self: seen.setdefault("splash", True))
+    monkeypatch.setattr(entry, "QApplication", lambda *a: app)          # pytest already owns the QApplication
+    monkeypatch.setattr(type(app), "exec", lambda self: 0)
+    monkeypatch.delenv("CNCDECK_NO_SPLASH", raising=False)
+    made = []
+
+    class Tracked(entry.MainWindow):
+        def __init__(self, *a):
+            super().__init__(*a)
+            made.append(self)
+
+    monkeypatch.setattr(entry, "MainWindow", Tracked)
+    assert entry.main([]) == 0 and seen.get("splash")          # default: splash is used
+    assert made and not made[0].isVisible()                    # the window opens only when the splash ends
+    seen.clear()
+    assert entry.main(["--no-splash"]) == 0 and not seen       # opt-out
+    assert made[1].isVisible()
+    for w in made:
+        w.close()

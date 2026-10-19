@@ -9,6 +9,7 @@ Python 3 + Qt6 (PySide6) + pyserial. Gira su Ubuntu 22.04/24.04.
 ./install.sh          # venv in ~/.local/share/cncdeck, launcher "cncdeck", voce nel menu
 cncdeck               # oppure: cncdeck examples/demo.nc
 cncdeck --sim         # prova tutto senza macchina (simulatore GRBL interno)
+cncdeck --no-splash   # senza la schermata iniziale di 3 secondi (o CNCDECK_NO_SPLASH=1)
 ```
 
 Senza installare: `pip install -r requirements.txt && python3 -m cncdeck`.
