@@ -1,7 +1,21 @@
 # CNC Deck
 
-Sender G-code per CNC **GRBL 1.1** (pensato per la CNC 1610 Pro) con interfaccia scura e viewer 3D.
+<p align="center"><img src="docs/splash.png" alt="CNC Deck - schermata iniziale" width="640"></p>
+
+Sender G-code per CNC **GRBL 1.1** (pensato per la CNC 1610 Pro) con interfaccia scura e viewer 3D, più un convertitore **SVG → G-code**.
 Python 3 + Qt6 (PySide6) + pyserial. Gira su Ubuntu 22.04/24.04.
+
+## Com'è fatto
+
+Un'unica finestra con due modalità, selezionabili dall'interruttore in alto a sinistra.
+
+**Sender CNC** – carica un `.gcode`, controlla la macchina (DRO, jog, probe Z, override, mandrino) e invia il programma con anteprima 3D in tempo reale. Qui il lavoro di esempio è in esecuzione sul simulatore GRBL integrato.
+
+<p align="center"><img src="docs/sender.png" alt="CNC Deck - modalità Sender CNC" width="900"></p>
+
+**Convertitore SVG** – carica un `.svg`, crea una o più operazioni (esterno, interno, tasca, incisione, con linguette di fissaggio), guarda il percorso utensile in anteprima 3D e poi salva il `.gcode` o premi **Invia alla CNC** per caricarlo direttamente nel Sender.
+
+<p align="center"><img src="docs/converter.png" alt="CNC Deck - modalità Convertitore SVG" width="900"></p>
 
 ## Installazione (Ubuntu)
 
@@ -67,6 +81,7 @@ assolute (G90) che partono dallo zero pezzo; un programma solo-G91 viene disegna
 pip install -e .[dev]
 python -m pytest            # test: parser, protocollo/streaming contro il simulatore, conversione SVG/CAM, UI offscreen
 python examples/make_demo.py
+QT_QPA_PLATFORM=offscreen python3 docs/make_screenshots.py   # rigenera le immagini del README
 ```
 
 `cncdeck/simulator.py` emula GRBL 1.1 (buffer RX da 127 byte, planner da 15 blocchi, hold/jog-cancel, WCO, probe,
