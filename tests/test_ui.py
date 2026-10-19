@@ -232,3 +232,77 @@ def test_close_while_paused_on_error_does_not_hang(win, tmp_path):
     t0 = time.time()
     win.close()                                                 # question() is stubbed to Yes by the fixture
     assert time.time() - t0 < 4 and not win.conn.isRunning() and not win.isVisible()
+
+
+# ---------------------------------------------------------------- SVG converter mode
+def test_mode_switch_keeps_sender_and_shows_converter(win):
+    from PySide6.QtWidgets import QApplication
+    assert win.mode == 0 and win.stack.currentIndex() == 0
+    win.btn_mode[1].click()
+    assert win.mode == 1 and win.stack.currentWidget() is win.converter
+    assert not win.act_run.isVisible() and not win.act_home.isVisible()      # sender toolbar hidden in converter mode
+    assert win.btn_mode[1].isChecked() and not win.btn_mode[0].isChecked()
+    assert win.connected                                                       # connection untouched by the switch
+    win.btn_mode[0].click()
+    assert win.mode == 0 and win.stack.currentIndex() == 0
+    QApplication.instance().processEvents()
+
+
+def _convert_demo(win):
+    win.set_mode(1)
+    assert win.converter.load_svg("examples/demo.svg")
+    assert pump(lambda: win.converter.program is not None and not win.converter._dirty, 30)
+    return win.converter
+
+
+def test_converter_generates_preview_and_enables_actions(win):
+    c = _convert_demo(win)
+    assert len(c.doc.shapes) == 4 and c.result.gcode.startswith("; CNC Deck")
+    assert c.btn_send.isEnabled() and c.btn_save.isEnabled()
+    assert len(c.view.guides) >= 4 and c.view.program is c.program          # design + toolpath in the preview
+    assert "tempo stimato" in c.summary.text()
+    c.j_tool.setValue(2.0)                                                     # edit -> debounced regeneration
+    assert not c.btn_send.isEnabled()                                          # stale G-code can't be sent
+    assert pump(lambda: c.btn_send.isEnabled() and "Utensile 2 mm" in c.result.gcode, 30)
+
+
+def test_send_to_cnc_loads_sender_in_memory_without_files(win, tmp_path, monkeypatch):
+    import os
+    monkeypatch.chdir(tmp_path)  # any stray file written by the flow would land here
+    from pathlib import Path
+    svg = (Path(__file__).resolve().parent.parent / "examples" / "demo.svg").read_text()
+    (tmp_path / "in.svg").write_text(svg)
+    win.set_mode(1)
+    assert win.converter.load_svg(str(tmp_path / "in.svg"))
+    assert pump(lambda: win.converter.program is not None and not win.converter._dirty, 30)
+    gcode = win.converter.result.gcode
+    win.converter.btn_send.click()
+    assert win.mode == 0 and win.file_path is None                             # back in the Sender, no file involved
+    assert pump(lambda: win.program is not None and len(win.program.commands) > 10, 20)
+    assert win.editor.toPlainText() == gcode
+    assert win.program.commands == __import__("cncdeck.gcode", fromlist=["parse_program"]).parse_program(gcode).commands
+    assert win.act_run.isEnabled()                                             # ready: needs an explicit Avvia
+    assert "in.gcode" in win.windowTitle()
+    assert not [f for f in os.listdir(tmp_path) if f.endswith((".gcode", ".nc"))]
+    assert not win._running                                                    # nothing starts by itself
+
+
+def test_generated_job_streams_to_grbl_without_errors(win, tmp_path):
+    c = _convert_demo(win)
+    c.btn_send.click()
+    assert pump(lambda: win.program is not None and len(win.program.commands) > 10, 20)
+    assert not win.program.warnings
+    n = len(win.program.commands)
+    win.run_program()
+    assert pump(lambda: not win._running and win.progress.value() == 1000, 180)
+    sim = win.conn._ser
+    assert sim.overflows == 0 and sim.max_rx_used <= 127
+    assert not win.error_bar.isVisible() and "error:" not in win.console.log.toPlainText()
+    assert win.status.state == "Idle" and win.status.mpos[2] == pytest.approx(5.0, abs=0.01)   # ended at safe Z
+    assert sim.lines_executed >= n - 5
+
+
+def test_sender_arrows_unaffected_by_converter(win):
+    win.set_mode(1)
+    win.set_mode(0)
+    assert _press_pad(win, 0) == pytest.approx(5.0, abs=0.01)                  # still: up arrow -> Y+

@@ -30,7 +30,27 @@ Senza installare: `pip install -r requirements.txt && python3 -m cncdeck`.
 | Probe Z | discesa lenta `G38.2` su piastrina di tocco, azzera Z con lo spessore indicato e risale |
 | Override | avanzamento, rapidi, mandrino (comandi real-time) |
 | Mandrino | M3/M5 con S regolabile |
+| Convertitore SVG | modalità «Convertitore SVG» (interruttore in alto a sinistra): carica un `.svg`, scegli operazioni e utensile, anteprima 3D live, **Salva .gcode** oppure **Invia alla CNC ➜** (carica il G-code nel Sender senza passare dal disco). Vedi sotto |
 | Altro | homing, sblocco, reset, check mode, console con cronologia, editor dei `$$` con descrizioni, 6 macro personalizzabili, drag & drop del file, M6/T convertiti in pausa M0 per il cambio utensile manuale |
+
+## Convertitore SVG → G-code
+
+Approccio di [jscut](https://github.com/tbfleming/jscut), riscritto in Python con `pyclipper` (binding di Clipper, la
+stessa libreria geometrica di jscut) e `svgelements` (trasformazioni, unità, viewBox):
+
+- **Operazioni** (anche più d'una, in sequenza): *Esterno*, *Interno*, *Tasca*, *Incisione* (linea centrale, anche tracciati aperti);
+  per ognuna: forme usate, combinazione (unione / intersezione / differenza / XOR), direzione (convenzionale / concorde, per mandrino
+  orario), profondità totale e per passata, step over, larghezza della fascia, margine, entrata a rampa.
+- **Utensile**: diametro, avanzamento di taglio e di tuffo, Z di sicurezza, M3/M5 opzionali, unità del G-code (mm o pollici), posizione dello zero.
+- **Convenzione Y come jscut**: Y_gcode = −Y_svg. Con «angolo alto-sinistro del disegno» (predefinito) lo zero sta in alto a sinistra del
+  pezzo e il lavoro si sviluppa in Y negativa, esattamente come i file che già usi. Il tuo zero pezzo deve coincidere con quel punto.
+- **Ottimizzazioni rispetto all'output jscut**: spostamenti con `G0` (non `G1` con feed enormi), nessun punto duplicato o allineato,
+  avanzamento scritto solo quando cambia, righe corte, intestazione `G21 G90 G94`, fine con `G0` a Z sicura e `M2`. Il G-code generato
+  passa dallo stesso parser e dallo stesso streaming del Sender: un test lo trasmette al simulatore GRBL senza errori.
+- Il mandrino **non** viene acceso di default (come jscut): usa il pulsante Mandrino del Sender oppure attiva M3/M5 nel convertitore.
+- «Invia alla CNC» **non avvia** il lavoro: porta il programma nel Sender e passa a quella modalità; controlla lo zero e premi Avvia.
+
+Non implementati rispetto a jscut: *V-pocket*, *tabs* di fissaggio, Z origin dal fondo del materiale, conversione da testo SVG (converti in tracciati).
 
 Non implementato (rispetto a Candle): **height map / autolivellamento**. Il viewer assume programmi in coordinate
 assolute (G90) che partono dallo zero pezzo; un programma solo-G91 viene disegnato a partire da 0,0,0.
@@ -39,7 +59,7 @@ assolute (G90) che partono dallo zero pezzo; un programma solo-G91 viene disegna
 
 ```bash
 pip install -e .[dev]
-python -m pytest            # 25 test: parser, protocollo/streaming contro il simulatore, UI offscreen
+python -m pytest            # test: parser, protocollo/streaming contro il simulatore, conversione SVG/CAM, UI offscreen
 python examples/make_demo.py
 ```
 

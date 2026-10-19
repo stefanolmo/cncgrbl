@@ -6,7 +6,7 @@ import math
 import numpy as np
 from PySide6.QtCore import QLineF, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import (QBrush, QColor, QFont, QImage, QLinearGradient, QPainter, QPen,
-                           QRadialGradient)
+                           QPolygonF, QRadialGradient)
 from PySide6.QtWidgets import QWidget
 
 from . import theme
@@ -51,6 +51,7 @@ class ToolpathView(QWidget):
         self.done_upto = 0                      # number of segments already executed
         self.show_rapids = True
         self.show_envelope = False
+        self.guides: list = []
         self.envelope: tuple[np.ndarray, np.ndarray] | None = None  # (min,max) in work coords
         self._drag = None
         self._cache_key = None
@@ -65,7 +66,12 @@ class ToolpathView(QWidget):
         self._zmax = 1.0
 
     # ---------- data ----------
-    def set_program(self, prog: Program | None) -> None:
+    def set_guides(self, guides: list | None) -> None:
+        """Faint polylines (N,3) drawn under the toolpath, e.g. the original SVG design outlines."""
+        self.guides = guides or []
+        self.update()
+
+    def set_program(self, prog: Program | None, fit: bool = True) -> None:
         self.program = prog
         self.done_upto = 0
         self._invalidate()
@@ -77,7 +83,10 @@ class ToolpathView(QWidget):
             self._zmin, self._zmax = float(ref.min()), float(ref.max())
             span = max(self._zmax - self._zmin, 1e-6)
             self._seg_bucket = np.clip(((z - self._zmin) / span * (N_BUCKETS - 1)).round().astype(np.int32), 0, N_BUCKETS - 1)
-            self.fit()
+            if fit:
+                self.fit()
+            else:
+                self.update()
         else:
             self.update()
 
@@ -212,6 +221,7 @@ class ToolpathView(QWidget):
         self._draw_grid(p)
         self._draw_bbox(p)
         self._draw_envelope(p)
+        self._draw_guides(p)
         self._draw_path(p)
         self._draw_axes(p)
         self._draw_tool(p)
@@ -256,6 +266,15 @@ class ToolpathView(QWidget):
             if abs(v / major - round(v / major)) < 1e-6 and abs(v) > 1e-9:
                 s = self.project(np.array([[x0, v, 0.0]]))[0]
                 p.drawText(QPointF(s[0] - 26, s[1] - 2), f"{v:g}")
+
+    def _draw_guides(self, p: QPainter) -> None:
+        if not self.guides:
+            return
+        p.setPen(QPen(QColor(147, 197, 253, 120), 1.2))
+        p.setBrush(Qt.NoBrush)
+        for g in self.guides:
+            s = self.project(np.asarray(g, float))
+            p.drawPolyline(QPolygonF([QPointF(x, y) for x, y in s]))
 
     def _draw_axes(self, p: QPainter) -> None:
         lo, hi = self._scene_bounds()
@@ -408,3 +427,38 @@ class ToolpathView(QWidget):
             p.setPen(QColor(255, 255, 255, 150))
             p.drawText(QPointF(x0 - 38, y0 + 8), f"{self._zmax:.1f}")
             p.drawText(QPointF(x0 - 38, y0 + ht), f"{self._zmin:.1f}")
+
+
+def add_view_buttons(view: "ToolpathView") -> QWidget:
+    """Floating row of view presets on top of a ToolpathView (3D / Alto / Fronte / Lato / Adatta / Rapidi)."""
+    from PySide6.QtWidgets import QHBoxLayout, QToolButton
+    bar = QWidget(view)
+    bar.setStyleSheet("background: transparent;")
+    lay = QHBoxLayout(bar)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.setSpacing(4)
+
+    def mk(text, tip, slot, checkable=False, checked=False):
+        b = QToolButton()
+        b.setText(text)
+        b.setToolTip(tip)
+        b.setCheckable(checkable)
+        b.setChecked(checked)
+        b.setStyleSheet("padding:4px 9px; font-size:11px; background: rgba(20,26,33,200);")
+        b.clicked.connect(slot)
+        lay.addWidget(b)
+
+    def rapids(on):
+        view.show_rapids = on
+        view._invalidate()
+        view.update()
+
+    mk("3D", "Vista isometrica", lambda: view.set_view("iso"))
+    mk("Alto", "Vista dall'alto", lambda: view.set_view("top"))
+    mk("Fronte", "Vista frontale", lambda: view.set_view("front"))
+    mk("Lato", "Vista laterale", lambda: view.set_view("right"))
+    mk("Adatta", "Inquadra tutto (doppio clic)", view.fit)
+    mk("Rapidi", "Mostra i movimenti rapidi", rapids, True, True)
+    bar.move(10, 10)
+    bar.adjustSize()
+    return bar

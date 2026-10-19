@@ -69,6 +69,12 @@ QPlainTextEdit, QTextEdit, QTableWidget {{
     background: #0b0f14; border: 1px solid {BORDER}; border-radius: 8px;
     font-family: {MONO}; font-size: 12px; selection-background-color: {ACCENT_DIM};
 }}
+QListWidget {{ background: #0b0f14; border: 1px solid {BORDER}; border-radius: 8px; padding: 3px; outline: 0; }}
+QListWidget::item {{ padding: 4px 6px; border-radius: 5px; }}
+QListWidget::item:selected {{ background: {ACCENT_DIM}; color: {TEXT}; }}
+QListWidget::item:hover {{ background: #18212b; }}
+QListWidget::indicator {{ width: 15px; height: 15px; border-radius: 4px; border: 1px solid {BORDER}; background: #10161d; }}
+QListWidget::indicator:checked {{ background: {ACCENT}; border-color: {ACCENT}; }}
 QTabWidget::pane {{ border: 1px solid {BORDER}; border-radius: 8px; top: -1px; }}
 QTabBar::tab {{ background: transparent; color: {MUTED}; padding: 7px 16px; border: none; border-bottom: 2px solid transparent; }}
 QTabBar::tab:selected {{ color: {TEXT}; border-bottom: 2px solid {ACCENT}; }}

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="90mm" height="60mm" viewBox="0 0 90 60">
+  <!-- targhetta: contorno arrotondato, foro, stella da svuotare, linea da incidere -->
+  <rect id="contorno" x="5" y="5" width="80" height="50" rx="8" ry="8" fill="none" stroke="black"/>
+  <circle id="foro" cx="16" cy="16" r="3.5"/>
+  <path id="stella" fill-rule="evenodd" transform="translate(52,28)"
+        d="M0,-17 L4.2,-5.8 L16.2,-5.3 L6.8,2.2 L10,13.8 L0,7.2 L-10,13.8 L-6.8,2.2 L-16.2,-5.3 L-4.2,-5.8 Z"/>
+  <path id="onda" fill="none" stroke="black" d="M12,44 C20,36 28,52 36,44"/>
+</svg>

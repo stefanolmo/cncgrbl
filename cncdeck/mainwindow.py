@@ -10,12 +10,13 @@ from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFrame,
                                QGridLayout, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMainWindow, QMessageBox,
                                QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSizePolicy, QSlider, QSpinBox,
-                               QSplitter, QTabWidget, QToolBar, QToolButton, QVBoxLayout, QWidget)
+                               QSplitter, QStackedWidget, QTabWidget, QToolBar, QToolButton, QVBoxLayout, QWidget)
 from serial.tools import list_ports
 
 from . import __version__, grbl, theme
 from .gcode import Program, format_duration, parse_program, preamble_for
 from .grbl import SIM_PORT, GrblConnection, Status
+from .convertpage import ConverterPage
 from .settings_dialog import GrblSettingsDialog
 from .theme import icon
 from .viewer import ToolpathView
@@ -48,6 +49,7 @@ class MainWindow(QMainWindow):
         self.status = Status()
         self.program: Program | None = None
         self.file_path: str | None = None
+        self._display_name = ""
         self._run_cmds: list[tuple[int, str]] = []
         self._acked_idx = -1
         self._running = False
@@ -68,9 +70,14 @@ class MainWindow(QMainWindow):
         self._error_count = 0
         self._ports_sig: list[str] = []
 
+        self.mode = 0
         self._build_toolbar()
         self._build_ui()
         self._build_statusbar()
+        self._sender_actions += [self.act_open, self.act_reload, self.act_save, self.act_run, self.act_pause,
+                                 self.act_stop, self.act_home, self.act_unlock, self.act_reset, self.act_check,
+                                 self.act_probe]
+        self.set_mode(0)
         self._restore()
         self._refresh_ports()
         self._update_enabled()
@@ -100,6 +107,25 @@ class MainWindow(QMainWindow):
         tb.setMovable(False)
         tb.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.addToolBar(tb)
+        seg = QWidget()
+        seg.setStyleSheet("background: transparent;")
+        sl = QHBoxLayout(seg)
+        sl.setContentsMargins(0, 0, 8, 0)
+        sl.setSpacing(0)
+        self.btn_mode = []
+        for i, text in enumerate(("Sender CNC", "Convertitore SVG")):
+            b = QToolButton()
+            b.setText(text)
+            b.setCheckable(True)
+            b.setToolTip("Passa a " + text)
+            b.setStyleSheet("padding: 7px 16px; font-weight: 600; border-radius: 0;"
+                            + ("border-top-left-radius:8px; border-bottom-left-radius:8px;" if i == 0 else
+                               "border-top-right-radius:8px; border-bottom-right-radius:8px; border-left: none;"))
+            b.clicked.connect(lambda _=False, n=i: self.set_mode(n))
+            sl.addWidget(b)
+            self.btn_mode.append(b)
+        tb.addWidget(seg)
+        self._sender_actions: list[QAction] = []
         self.act_open = self._act("open", "Apri", "Apri file G-code", self.open_file, "Ctrl+O")
         self.act_reload = self._act("reload", "Ricarica", "Ricarica il file da disco", self.reload_file, "Ctrl+Shift+R")
         self.act_save = self._act("save", "Salva", "Salva le modifiche al file", self.save_file, "Ctrl+S")
@@ -114,12 +140,12 @@ class MainWindow(QMainWindow):
         self.act_settings = self._act("gear", "GRBL", "Impostazioni della scheda ($$)", self.show_settings)
         for a in (self.act_open, self.act_reload, self.act_save):
             tb.addAction(a)
-        tb.addSeparator()
+        self._sender_actions += [tb.addSeparator()]
         for a in (self.act_run, self.act_pause, self.act_stop):
             tb.addAction(a)
         for a, name in ((self.act_run, "run"), (self.act_stop, "stopb")):
             tb.widgetForAction(a).setObjectName(name)
-        tb.addSeparator()
+        self._sender_actions += [tb.addSeparator()]
         for a in (self.act_home, self.act_unlock, self.act_reset, self.act_check, self.act_probe):
             tb.addAction(a)
         spacer = QWidget()
@@ -131,7 +157,12 @@ class MainWindow(QMainWindow):
     def _build_ui(self) -> None:
         split = QSplitter(Qt.Horizontal)
         split.setChildrenCollapsible(False)
-        self.setCentralWidget(split)
+        self.stack = QStackedWidget()
+        self.stack.addWidget(split)                    # page 0: Sender CNC (unchanged)
+        self.converter = ConverterPage()               # page 1: SVG converter
+        self.converter.sendRequested.connect(self._send_from_converter)
+        self.stack.addWidget(self.converter)
+        self.setCentralWidget(self.stack)
 
         # ---- left column
         left = QWidget()
@@ -353,6 +384,39 @@ class MainWindow(QMainWindow):
         right.setStretchFactor(1, 2)
         split.addWidget(right)
         split.setStretchFactor(1, 1)
+
+    # ------------------------------------------------------------------ modes
+    def set_mode(self, n: int) -> None:
+        """0 = Sender CNC, 1 = SVG converter. The sender keeps running (streaming, status) in either mode."""
+        self.mode = n
+        self.stack.setCurrentIndex(n)
+        for i, b in enumerate(self.btn_mode):
+            b.setChecked(i == n)
+        for a in self._sender_actions:
+            a.setVisible(n == 0)
+        if n == 0:
+            self._update_enabled()
+
+    def _send_from_converter(self, text: str, name: str) -> None:
+        """'Invia alla CNC': hand the generated G-code to the Sender in memory (no file round-trip)."""
+        if self.load_gcode_text(text, name):
+            self.set_mode(0)
+            self.sb_state.setText("G-code dalla conversione caricato nel Sender: controlla lo zero pezzo, poi premi Avvia")
+
+    def load_gcode_text(self, text: str, name: str) -> bool:
+        if self._running:
+            QMessageBox.information(self, APP_NAME, "Non puoi caricare un programma durante l'esecuzione.")
+            return False
+        self.file_path = None
+        self._display_name = name
+        self.setWindowTitle(f"{name} — {TITLE}")
+        self._loading_text = True
+        self.editor.setPlainText(text)
+        self._loading_text = False
+        self._parse(text)
+        self.tabs.setCurrentIndex(0)
+        self._update_enabled()
+        return True
 
     def _build_view_buttons(self) -> None:
         bar = QWidget(self.view)
@@ -733,7 +797,8 @@ class MainWindow(QMainWindow):
             self.conn.send_realtime(grbl.RT_JOG_CANCEL)
 
     def eventFilter(self, obj, ev) -> bool:
-        if self.chk_keys.isChecked() and ev.type() in (QEvent.KeyPress, QEvent.KeyRelease) and self.isActiveWindow():
+        if (self.mode == 0 and self.chk_keys.isChecked() and ev.type() in (QEvent.KeyPress, QEvent.KeyRelease)
+                and self.isActiveWindow()):
             fw = QApplication.focusWidget()
             if not isinstance(fw, (QLineEdit, QPlainTextEdit, QSpinBox, QDoubleSpinBox, QComboBox)):
                 if not ev.isAutoRepeat():
@@ -808,6 +873,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, APP_NAME, str(e))
             return
         self.file_path = path
+        self._display_name = os.path.basename(path)
         self.qs.setValue("last_dir", os.path.dirname(path))
         self.setWindowTitle(f"{os.path.basename(path)} — {TITLE}")
         self._loading_text = True
@@ -852,7 +918,7 @@ class MainWindow(QMainWindow):
         self.editor.gutter.update()
         sz = prog.size
         n_cmd = len(prog.commands)
-        name = os.path.basename(self.file_path) if self.file_path else "(senza nome)"
+        name = self._display_name or "(senza nome)"
         self.job_label.setText(
             f"<b>{name}</b> &nbsp;•&nbsp; {n_cmd} comandi &nbsp;•&nbsp; ingombro "
             f"{sz[0]:.1f} × {sz[1]:.1f} × {sz[2]:.1f} mm &nbsp;•&nbsp; lavoro {prog.feed_length:.0f} mm "
