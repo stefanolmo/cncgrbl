@@ -355,3 +355,18 @@ def test_cli_splash_can_be_disabled_and_window_opens_after_it(monkeypatch, tmp_p
     assert made[1].isVisible()
     for w in made:
         w.close()
+
+
+def test_settings_dialog_keeps_user_edits_when_refreshed(win):
+    from cncdeck.settings_dialog import GrblSettingsDialog
+    dlg = GrblSettingsDialog({110: 2000.0, 111: 2000.0})
+    for r in range(dlg.table.rowCount()):
+        if dlg.table.item(r, 0).text() == "$110":
+            dlg.table.item(r, 2).setText("1500")
+    dlg.load({110: 2000.0, 111: 1800.0})                # late reply of `$$` after the user typed
+    texts = {dlg.table.item(r, 0).text(): dlg.table.item(r, 2).text() for r in range(dlg.table.rowCount())}
+    assert texts["$110"] == "1500" and texts["$111"] == "1800"
+    got = []
+    dlg.applyRequested.connect(got.append)
+    dlg._apply()
+    assert got == [["$110=1500"]]

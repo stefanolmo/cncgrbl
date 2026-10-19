@@ -54,6 +54,13 @@ class GrblSettingsDialog(QDialog):
         return f"{v:g}" if abs(v - round(v)) < 1e-9 else f"{v:.3f}".rstrip("0").rstrip(".")
 
     def load(self, settings: dict[int, float]) -> None:
+        # a refresh (e.g. the reply to the `$$` sent on open) must not wipe values the user already edited
+        edited: dict[int, str] = {}
+        for r in range(self.table.rowCount()):
+            n = int(self.table.item(r, 0).text()[1:])
+            txt = self.table.item(r, 2).text()
+            if txt != self._orig.get(n):
+                edited[n] = txt
         self.table.blockSignals(True)
         self.table.setRowCount(0)
         self._orig = {}
@@ -63,7 +70,7 @@ class GrblSettingsDialog(QDialog):
             desc, unit = SETTING_INFO.get(n, ("(non documentato)", ""))
             val = self._fmt(settings[n])
             self._orig[n] = val
-            for c, text in enumerate((f"${n}", desc, val, unit)):
+            for c, text in enumerate((f"${n}", desc, edited.get(n, val), unit)):
                 it = QTableWidgetItem(text)
                 if c != 2:
                     it.setFlags(it.flags() & ~Qt.ItemIsEditable)
