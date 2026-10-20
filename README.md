@@ -28,6 +28,23 @@ cncdeck --no-splash   # senza la schermata iniziale di 3 secondi (o CNCDECK_NO_S
 
 Senza installare: `pip install -r requirements.txt && python3 -m cncdeck`.
 
+## Installazione come pacchetto .deb (Ubuntu/Debian)
+
+Pacchetto "da distribuzione": contiene solo CNC Deck e usa le librerie Python di sistema (`python3-pyside6.*`, `python3-numpy`,
+`python3-serial`, `python3-pyclipper`); incorpora soltanto `svgelements`. Si installa e si disinstalla con apt o Synaptic:
+
+```bash
+sudo apt install ./packaging/deb/cncdeck_0.5.0_all.deb     # installa anche le dipendenze di sistema
+sudo apt remove cncdeck                                    # disinstalla (oppure da Synaptic / Software)
+```
+
+- Richiede che nei repository della tua versione di Ubuntu ci siano i pacchetti `python3-pyside6.*` e `python3-pyclipper`
+  (verifica: `apt-cache policy python3-pyside6.qtwidgets python3-pyclipper`). Se mancano, usa `./install.sh`.
+- Porta seriale: `sudo usermod -aG dialout $USER` (poi logout/login); vedi anche `/usr/share/doc/cncdeck/README.Debian`.
+- Se avevi installato con `install.sh`, rimuovi prima quella copia (vedi README.Debian) per non avere due versioni.
+- Per rigenerare il pacchetto: `packaging/build-deb.sh` (richiede `dpkg-deb` e pip; scrive in `dist/`).
+
+
 **Porta seriale su Ubuntu** (cause classiche di "non vedo la porta"):
 - l'utente deve stare nel gruppo `dialout`: `sudo usermod -aG dialout $USER`, poi logout/login;
 - `brltty` ruba le schede CH340 (la 1610 Pro ne usa una): `sudo apt remove brltty`.

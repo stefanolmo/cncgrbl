@@ -1,0 +1,30 @@
+.TH CNCDECK 1 "2026" "cncdeck" "Comandi utente"
+.SH NOME
+cncdeck \- sender G\-code per CNC GRBL 1.1 con convertitore SVG
+.SH SINTASSI
+.B cncdeck
+[\fB\-\-sim\fR] [\fB\-\-no\-splash\fR] [\fIFILE\fR]
+.SH DESCRIZIONE
+CNC Deck invia file G\-code a una CNC con GRBL 1.1 tramite porta seriale, con anteprima 3D,
+DRO, jog, probe Z, override e impostazioni della scheda. La modalit\['a] Convertitore SVG
+trasforma un file SVG in G\-code (operazioni esterno, interno, tasca, incisione, linguette di
+fissaggio) e lo passa al sender senza salvare file.
+.SH OPZIONI
+.TP
+.I FILE
+File G\-code da aprire all'avvio.
+.TP
+.B \-\-sim
+Si collega al simulatore GRBL interno: prova senza macchina.
+.TP
+.B \-\-no\-splash
+Non mostra la schermata iniziale di 3 secondi (equivale a CNCDECK_NO_SPLASH=1).
+.SH FILE
+.TP
+.I ~/.config/cncdeck/cncdeck.conf
+Impostazioni dell'utente (porta, velocit\['a] di jog, macro, geometria della finestra).
+.TP
+.I /usr/share/doc/cncdeck/
+Documentazione ed esempi (README.Debian: gruppo dialout e brltty).
+.SH AUTORE
+Stefano Ciurleo & Claude Code.
