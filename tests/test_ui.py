@@ -506,6 +506,21 @@ def test_height_map_probe_then_run_follows_tilted_surface(win, tmp_path):
     assert win.btn_hm_probe.isEnabled()
     assert not win.chk_hm.isEnabled()
     win.hm_feed.setValue(300)
+    warned = []
+    orig_warn = QMessageBox.warning
+    QMessageBox.warning = staticmethod(lambda *a, **k: (warned.append(a[2]), QMessageBox.Yes)[1])
+    win.start_heightmap()                                  # refused until the contact test has passed
+    QMessageBox.warning = orig_warn
+    assert warned and "Test probe" in warned[0] and not win._probing
+    win.send("G90G0Z-0.2")                                  # tip on the virtual surface: Pn:P
+    assert pump(lambda: "P" in win.status.pins)
+    win.send("G0Z5")
+    assert pump(lambda: "P" not in win.status.pins and abs(win.status.wpos[2] - 5) < 0.01 and win.status.state == "Idle")
+    win.start_probe_test()
+    win.send("G90G0Z-0.2")
+    assert pump(lambda: win._probe_ok, 20)
+    win.send("G0Z5")
+    assert pump(lambda: "P" not in win.status.pins and abs(win.status.wpos[2] - 5) < 0.01 and win.status.state == "Idle")
     win.start_heightmap()
     assert win._probing and not win.act_run.isEnabled() and not win.pad.isEnabled()
     assert pump(lambda: not win._probing and win.heightmap is not None, 60)

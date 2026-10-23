@@ -65,6 +65,8 @@ class MainWindow(QMainWindow):
         self.heightmap: HeightMap | None = None     # surface in machine coordinates
         self.prober: HeightMapProbe | None = None
         self._probing = False
+        self._probe_ok = False          # contact test passed since the connection was opened
+        self._probe_test_until = 0.0
         self._hm_wco: tuple | None = None
         self._parse_serial = 0
         self._parse_thread: ParseThread | None = None
@@ -320,11 +322,15 @@ class MainWindow(QMainWindow):
         self.btn_hm_probe.setIcon(icon("probe"))
         self.btn_hm_probe.setToolTip("Measure the surface with the probe on a grid covering the extent of the G-code")
         self.btn_hm_probe.clicked.connect(self.start_heightmap)
+        self.btn_hm_test = QPushButton("Test probe")
+        self.btn_hm_test.setToolTip("Touch the tool to the material (or plate) when asked: confirms that GRBL sees the probe pin")
+        self.btn_hm_test.clicked.connect(self.start_probe_test)
         self.btn_hm_cancel = QPushButton("Cancel")
         self.btn_hm_cancel.setObjectName("danger")
         self.btn_hm_cancel.clicked.connect(lambda: self.prober and self.prober.abort())
         self.btn_hm_cancel.hide()
         row.addWidget(self.btn_hm_probe, 1)
+        row.addWidget(self.btn_hm_test)
         row.addWidget(self.btn_hm_cancel)
         c.body.addLayout(row)
         self.hm_bar = QProgressBar()
@@ -651,6 +657,8 @@ class MainWindow(QMainWindow):
             self.btn_connect.setText("Disconnect")
             self.console.append(msg, "info")
         else:
+            self._probe_ok = False
+            self._probe_test_until = 0.0
             self.btn_connect.setText("Connect")
             self.port_combo.setEnabled(True)
             self.baud_combo.setEnabled(True)
@@ -675,6 +683,7 @@ class MainWindow(QMainWindow):
         for i, a in enumerate("XYZ"):
             self.axes[a].set_values(st.wpos[i], st.mpos[i])
         self.view.set_tool(st.wpos)
+        self._probe_test_tick(st)
         self.badge.set_state(st.state)
         self.act_check.setChecked(st.base_state == "Check")
         self.live.setText(f"Feed {st.feed:.0f} mm/min    Spindle {st.spindle:.0f}")
@@ -760,6 +769,8 @@ class MainWindow(QMainWindow):
         has_hm = self.heightmap is not None
         self.btn_hm_probe.setEnabled(bool(idle and st == "Idle" and self.program and len(self.program.path)))
         self.btn_hm_probe.setVisible(not self._probing)
+        self.btn_hm_test.setVisible(not self._probing)
+        self.btn_hm_test.setEnabled(bool(idle and st == "Idle"))
         self.btn_hm_cancel.setVisible(self._probing)
         self.chk_hm.setEnabled(has_hm and not self._probing)
         self.btn_hm_save.setEnabled(has_hm and not self._probing)
@@ -951,9 +962,37 @@ class MainWindow(QMainWindow):
                            safe_z=max(self.safe_z.value(), self.hm_clear.value() + 1.0), depth=self.hm_depth.value(),
                            clearance=self.hm_clear.value(), feed=self.hm_feed.value(), thickness=self.hm_thick.value())
 
+    def start_probe_test(self) -> None:
+        if "P" in self.status.pins:
+            QMessageBox.warning(self, "Test probe", "The probe already reads closed (Pn:P): release the contact first "
+                                "(or check $6 'Invert probe pin' and the wiring), then test again.")
+            return
+        self._probe_ok = False
+        self._probe_test_until = time.monotonic() + 30.0
+        self.console.append("Probe test: touch the tool to the material (or plate) now…", "info")
+        self.hm_label.setText("<b>Probe test:</b> touch the tool to the material or plate now (30 s)…")
+
+    def _probe_test_tick(self, st) -> None:
+        if not self._probe_test_until:
+            return
+        if "P" in st.pins:
+            self._probe_test_until = 0.0
+            self._probe_ok = True
+            self.console.append("Probe test passed: GRBL sees the contact (Pn:P)", "info")
+            self._refresh_heightmap_ui()
+        elif time.monotonic() > self._probe_test_until:
+            self._probe_test_until = 0.0
+            self.console.append("Probe test failed: no contact seen in 30 s. Check the clip, the wiring and $6.", "error")
+            self._refresh_heightmap_ui()
+
     def start_heightmap(self) -> None:
         p = self._hm_params()
         if not (p and self.prober and self.connected):
+            return
+        if not self._probe_ok:
+            QMessageBox.warning(self, "Height map", "Run «Test probe» first: GRBL must see the probe contact before the "
+                                "tool is allowed to descend onto the material. If the tool touches and does not stop, "
+                                "the machine would keep plunging.")
             return
         err = p.validate()
         if err:
@@ -1011,15 +1050,16 @@ class MainWindow(QMainWindow):
 
     def _refresh_heightmap_ui(self) -> None:
         hm = self.heightmap
+        tested = " • probe test OK" if self._probe_ok else " • probe not tested yet"
         if hm is None:
-            self.hm_label.setText("No map")
+            self.hm_label.setText("No map" + tested)
             self.view.set_heightmap(None)
             return
         x0, y0, x1, y1 = hm.area
         on = self.chk_hm.isChecked()
         self.hm_label.setText(f"Map {hm.shape[1]}×{hm.shape[0]} points • height difference {hm.spread:.3f} mm • {hm.created}<br>"
                               f"Area (machine) X {x0:.1f}…{x1:.1f}, Y {y0:.1f}…{y1:.1f} • "
-                              + ("<b>active</b>" if on else "inactive"))
+                              + ("<b>active</b>" if on else "inactive") + tested)
         self.view.set_heightmap(hm.shifted(self.status.wco))
         self._hm_wco = tuple(self.status.wco)
 
