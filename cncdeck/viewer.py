@@ -52,6 +52,7 @@ class ToolpathView(QWidget):
         self.show_rapids = True
         self.show_envelope = False
         self.guides: list = []
+        self.heightmap = None                   # HeightMap in work coordinates (auto-leveling), or None
         self.empty_message = "Apri un file G-code per vedere il percorso\n(trascina qui un file .nc / .gcode)"
         self.envelope: tuple[np.ndarray, np.ndarray] | None = None  # (min,max) in work coords
         self._drag = None
@@ -70,6 +71,11 @@ class ToolpathView(QWidget):
     def set_guides(self, guides: list | None) -> None:
         """Faint polylines (N,3) drawn under the toolpath, e.g. the original SVG design outlines."""
         self.guides = guides or []
+        self.update()
+
+    def set_heightmap(self, hm) -> None:
+        """Probed surface (HeightMap in work coordinates) drawn as a relief mesh under the toolpath."""
+        self.heightmap = hm
         self.update()
 
     def set_program(self, prog: Program | None, fit: bool = True) -> None:
@@ -227,6 +233,7 @@ class ToolpathView(QWidget):
         self._draw_bbox(p)
         self._draw_envelope(p)
         self._draw_guides(p)
+        self._draw_heightmap(p)
         self._draw_path(p)
         self._draw_axes(p)
         self._draw_tool(p)
@@ -280,6 +287,43 @@ class ToolpathView(QWidget):
         for g in self.guides:
             s = self.project(np.asarray(g, float))
             p.drawPolyline(QPolygonF([QPointF(x, y) for x, y in s]))
+
+    def _draw_heightmap(self, p: QPainter) -> None:
+        hm = self.heightmap
+        if hm is None:
+            return
+        z = np.where(np.isfinite(hm.z), hm.z, np.nan)
+        if not np.isfinite(z).any():
+            return
+        lo, hi = float(np.nanmin(z)), float(np.nanmax(z))
+        spread = hi - lo
+        exag = min(300.0, 3.0 / spread) if spread > 1e-4 else 1.0   # a 0.1 mm warp would be invisible at 1:1
+        X, Y = np.meshgrid(hm.xs, hm.ys)
+        Z = (np.nan_to_num(z, nan=lo) - lo) * exag
+        pts = np.stack([X, Y, Z], axis=-1)
+        s = self.project(pts.reshape(-1, 3)).reshape(pts.shape[0], pts.shape[1], 2)
+
+        def col(v, alpha):
+            c = depth_color(1.0 - (v - lo) / spread if spread > 1e-9 else 0.5)
+            c.setAlpha(alpha)
+            return c
+        ny, nx = z.shape
+        for j in range(ny):
+            for i in range(nx):
+                for dj, di in ((0, 1), (1, 0)):
+                    j2, i2 = j + dj, i + di
+                    if j2 < ny and i2 < nx:
+                        p.setPen(QPen(col((z[j, i] + z[j2, i2]) / 2 if np.isfinite(z[j, i] + z[j2, i2]) else lo, 150), 1.1))
+                        p.drawLine(QPointF(*s[j, i]), QPointF(*s[j2, i2]))
+        p.setPen(Qt.NoPen)
+        for j in range(ny):
+            for i in range(nx):
+                p.setBrush(col(z[j, i] if np.isfinite(z[j, i]) else lo, 230))
+                p.drawEllipse(QPointF(*s[j, i]), 2.5, 2.5)
+        p.setFont(QFont("monospace", 8))
+        p.setPen(QColor(255, 255, 255, 170))
+        a = self.project(np.array([[hm.xs[0], hm.ys[-1], 0.0]]))[0]
+        p.drawText(QPointF(a[0], a[1] - 6), f"mappa {nx}×{ny}  Δ {spread:.3f} mm  (rilievo ×{exag:.0f})")
 
     def _draw_axes(self, p: QPainter) -> None:
         lo, hi = self._scene_bounds()

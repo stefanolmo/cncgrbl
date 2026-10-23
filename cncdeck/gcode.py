@@ -121,6 +121,19 @@ def _arc_points(p0, p1, center_a, center_b, a, b, lin, cw, tol=0.02):
     return pts
 
 
+def arc_center_from_radius(pa, pb, ta, tb, r, cw):
+    """Centre of an R-format arc from (pa,pb) to (ta,tb); caller guarantees a valid radius."""
+    x = ta - pa
+    y = tb - pb
+    d2 = x * x + y * y
+    hh = -math.sqrt(max(4 * r * r - d2, 0.0)) / math.sqrt(d2)
+    if not cw:
+        hh = -hh
+    if r < 0:
+        hh = -hh
+    return pa + 0.5 * (x - y * hh), pb + 0.5 * (y + x * hh)
+
+
 def parse_program(text: str, rapid_rates=(500.0, 500.0, 500.0), default_feed=0.0) -> Program:
     lines = text.splitlines()
     prog = Program(source=lines)
@@ -242,13 +255,7 @@ def parse_program(text: str, rapid_rates=(500.0, 500.0, 500.0), default_feed=0.0
                     continue
                 if h < 0.01:
                     warn.append(f"Riga {i + 1}: raggio quasi uguale a metà corda, GRBL potrebbe rifiutare l'arco (error:34)")
-                hh = -math.sqrt(h) / math.sqrt(d2)
-                if not cw:
-                    hh = -hh
-                if r < 0:
-                    hh = -hh
-                ca = pos[a] + 0.5 * (x - y * hh)
-                cb = pos[b] + 0.5 * (y + x * hh)
+                ca, cb = arc_center_from_radius(pos[a], pos[b], tgt[a], tgt[b], r, cw)
             else:
                 ca = pos[a] + vals.get(oa, 0.0) * k
                 cb = pos[b] + vals.get(ob, 0.0) * k

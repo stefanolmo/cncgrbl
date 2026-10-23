@@ -1,7 +1,7 @@
 # Prompt: ricostruire "CNC Deck" (sender GRBL + convertitore SVG → G-code)
 
 > Da incollare per intero a un'altra IA di programmazione (con accesso a shell e filesystem). Descrive il software
-> **così com'è alla versione 0.5.0**: scopo, stack, architettura, comportamenti esatti, convenzioni da non cambiare,
+> **così com'è alla versione 0.6.0**: scopo, stack, architettura, comportamenti esatti, convenzioni da non cambiare,
 > trappole già incontrate e criteri di accettazione. Le sezioni «Decisioni vincolanti» e «Trappole note» contengono lezioni
 > pagate con bug reali: leggile prima di scrivere codice.
 
@@ -44,7 +44,7 @@ jscut e simili con **Y negativa** (zero in alto a sinistra del disegno), spostam
   salvo l'icona SVG del desktop entry in `packaging/`.
 - Pacchetto `cncdeck/` con entry point `cncdeck = cncdeck.__main__:main` (`pyproject.toml`, setuptools). Versione in
   `cncdeck/__init__.py` (`__version__`) e in `pyproject.toml`, sempre uguali; la versione compare nel titolo finestra
-  ("CNC Deck 0.5.0") e nella splash.
+  ("CNC Deck 0.6.0") e nella splash.
 - Headless: tutti i test girano con `QT_QPA_PLATFORM=offscreen` (impostato in `tests/conftest.py`).
 - Su Ubuntu servono i pacchetti di sistema `libxcb-cursor0 libxkbcommon-x11-0 libegl1 libgl1 libdbus-1-3 libfontconfig1`.
 
@@ -435,3 +435,15 @@ operazioni e linguette, splash, dialogo impostazioni, e **guardali**: layout non
 Height map / autolivellamento; V-pocket; Z origin dal fondo del materiale; conversione di testi SVG (vanno convertiti in tracciati);
 adattamento a macOS/Windows (il progetto è testato solo su Ubuntu 26.04 LTS); ordinamento manuale dei percorsi dentro una stessa
 operazione (l'ordine è tra le operazioni, con ▲/▼; dentro un'operazione è vicino-più-vicino).
+
+
+## Aggiunta 0.6.0 — Mappa altezze (solo Sender)
+
+- `heightmap.py`: `HeightMap` (assi e Z in coordinate **macchina**, NaN = non tastato), `z_at` bilineare con clamp ai bordi, `shifted(wco)`,
+  JSON; `correct_program(commands, hm_lavoro, start)` spezza ogni G1 alle linee della griglia, linearizza gli archi (G2/G3 → G1), somma Z;
+  G0 corregge solo l'arrivo; emette sempre coordinate assolute (ripristina G91 se il programma era relativo); rifiuta G92/G10/G55-59 e
+  posizione sconosciuta dopo G28/G30/G53.
+- `probing.py`: `HeightMapProbe` guida GRBL punto per punto (serpentina): `G0 Zsicura`, `G0 XY`, `G0 Z(ultimo contatto+avvicinamento)`,
+  `G38.2 Z-prof F..`; rifiuta se `Pn:P` già chiuso; fallisce su nessun contatto, allarme, errore GRBL, connessione persa; `abort()` = `conn.stop()`.
+- UI: card «Mappa altezze» nel Sender, rilievo nel viewer (`set_heightmap`), `_leveled()` applicata in `run_program` e `run_from_line`.
+- Simulatore: `probe_surface(x, y)` opzionale e `Pn:P` nello stato quando la punta è a contatto.

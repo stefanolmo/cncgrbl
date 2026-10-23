@@ -34,7 +34,7 @@ Pacchetto "da distribuzione": contiene solo CNC Deck e usa le librerie Python di
 `python3-serial`, `python3-pyclipper`); incorpora soltanto `svgelements`. Si installa e si disinstalla con apt o Synaptic:
 
 ```bash
-sudo apt install ./packaging/deb/cncdeck_0.5.0_all.deb     # installa anche le dipendenze di sistema
+sudo apt install ./packaging/deb/cncdeck_0.6.0_all.deb     # installa anche le dipendenze di sistema
 sudo apt remove cncdeck                                    # disinstalla (oppure da Synaptic / Software)
 ```
 
@@ -60,6 +60,7 @@ sudo apt remove cncdeck                                    # disinstalla (oppure
 | DRO | coordinate di lavoro e macchina, azzeramento per asse (`G10 L20 P0`, persistente), vai a zero, Z sicura |
 | Jog | passo 0.01–50 mm o continuo (si ferma subito al rilascio con jog-cancel), tastiera opzionale (frecce, Pag↑/↓) |
 | Probe Z | discesa lenta `G38.2` su piastrina di tocco, azzera Z con lo spessore indicato e risale |
+| Mappa altezze | livellamento automatico: tasta con la sonda una griglia sull'area del G-code e corregge la Z di ogni movimento prima dell'invio. Vedi sotto |
 | Override | avanzamento, rapidi, mandrino (comandi real-time) |
 | Mandrino | M3/M5 con S regolabile |
 | Convertitore SVG | modalità «Convertitore SVG» (interruttore in alto a sinistra): carica un `.svg`, scegli operazioni e utensile, anteprima 3D live, **Salva .gcode** oppure **Invia alla CNC ➜** (carica il G-code nel Sender senza passare dal disco). Vedi sotto |
@@ -91,6 +92,28 @@ Non implementati rispetto a jscut: *V-pocket*, Z origin dal fondo del materiale,
 
 Non implementato (rispetto a Candle): **height map / autolivellamento**. Il viewer assume programmi in coordinate
 assolute (G90) che partono dallo zero pezzo; un programma solo-G91 viene disegnato a partire da 0,0,0.
+
+## Mappa altezze (livellamento con la sonda)
+
+Solo nel Sender. GRBL 1.1 non compensa la planarità, quindi lo fa CNC Deck: misura la superficie e corregge il G-code prima di inviarlo
+(il file originale non viene modificato).
+
+1. Carica il G-code. Spegni il mandrino, collega la pinza della sonda alla fresa e al materiale (rame/metallo), azzera X, Y e Z
+   **sulla superficie nell'origine del lavoro** e solleva la fresa. Se il materiale non conduce, appoggia una piastrina e indica lo spessore.
+2. Scheda **Mappa altezze** → *Tasta area del lavoro*: la griglia copre l'ingombro delle sole lavorazioni più il margine, con passo ≤ al valore scelto.
+   Ogni punto: sale a Z sicura, si sposta, scende veloce fino a *Avvicin.* sopra l'ultimo contatto e poi tasta lentamente (`G38.2`).
+   La prima discesa parte da Z sicura. Il tasto *Annulla* (o Stop) interrompe; nessun contatto entro *Prof. max*, un allarme o un errore fermano tutto.
+3. La mappa si vede nel viewer (rilievo esagerato, colori per quota). Con «Applica la mappa» spuntato, *Avvia* e *Avvia da riga…* inviano
+   il G-code corretto: ogni taglio è spezzato a ogni linea della griglia e a ogni punto si somma l'altezza della superficie (interpolazione bilineare).
+   Gli archi diventano segmenti `G1`; i rapidi correggono solo la quota di arrivo. Si può salvare/caricare la mappa (`.json`).
+
+Limiti e cautele:
+- La mappa è in coordinate **macchina**: resta valida se cambi lo zero pezzo, ma **non** se sposti il pezzo o il piano.
+- Programmi con `G92`, `G10`, `G55`–`G59` sono rifiutati (cambierebbero il sistema di coordinate); dopo `G28/G30/G53` servono movimenti assoluti.
+- Fuori dall'area mappata si usa l'altezza del bordo (te lo segnala prima di partire).
+- Precisione: quella della tua sonda e di GRBL (tipicamente 0,01–0,03 mm a 25 mm/min). Per fresature profonde serve a poco; per incisioni/PCB sì.
+- Tempi: griglia da 10 mm su 150×90 mm ≈ 150 punti, 10–15 minuti. Il tasto *Tasta* mostra la stima.
+- Collaudato solo sul simulatore (piano inclinato): **prova la prima volta su scarto, a mandrino spento.**
 
 ## Sviluppo
 

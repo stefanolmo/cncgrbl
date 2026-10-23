@@ -16,6 +16,8 @@ from serial.tools import list_ports
 from . import __version__, grbl, theme
 from .gcode import Program, format_duration, parse_program, preamble_for
 from .grbl import SIM_PORT, GrblConnection, Status
+from .heightmap import HeightMap, HeightMapError, correct_program
+from .probing import HeightMapProbe, ProbeParams
 from .convertpage import ConverterPage
 from .settings_dialog import GrblSettingsDialog
 from .theme import icon
@@ -60,6 +62,10 @@ class MainWindow(QMainWindow):
         self._continuous = False
         self._probe_thickness = float(self.qs.value("probe_thickness", 15.0))
         self._probe_pending = False
+        self.heightmap: HeightMap | None = None     # surface in machine coordinates
+        self.prober: HeightMapProbe | None = None
+        self._probing = False
+        self._hm_wco: tuple | None = None
         self._parse_serial = 0
         self._parse_thread: ParseThread | None = None
         self._loading_text = False
@@ -93,6 +99,15 @@ class MainWindow(QMainWindow):
         QApplication.instance().installEventFilter(self)
 
     # ------------------------------------------------------------------ UI construction
+    @staticmethod
+    def _spin(lo: float, hi: float, val: float, decimals: int, suffix: str) -> QDoubleSpinBox:
+        w = QDoubleSpinBox()
+        w.setRange(lo, hi)
+        w.setDecimals(decimals)
+        w.setValue(val)
+        w.setSuffix(suffix)
+        return w
+
     def _act(self, name: str, text: str, tip: str, slot, shortcut: str | None = None, checkable=False) -> QAction:
         a = QAction(icon(name), text, self)
         a.setToolTip(f"{tip}" + (f"  ({shortcut})" if shortcut else ""))
@@ -275,6 +290,65 @@ class MainWindow(QMainWindow):
         self.spindle_slider.sliderReleased.connect(self._spindle_speed_changed)
         self.spindle_val.editingFinished.connect(self._spindle_speed_changed)
         c.body.addWidget(self.spindle_slider)
+        lv.addWidget(c)
+
+        c = Card("Mappa altezze (livellamento)")
+        self.hm_step = self._spin(1, 100, 10.0, 1, " mm")
+        self.hm_margin = self._spin(0, 50, 2.0, 1, " mm")
+        self.hm_depth = self._spin(0.5, 20, 3.0, 1, " mm")
+        self.hm_feed = self._spin(1, 300, 25.0, 0, " mm/min")
+        self.hm_clear = self._spin(0.3, 5, 1.0, 1, " mm")
+        self.hm_thick = self._spin(0, 50, 0.0, 2, " mm")
+        self.hm_step.setToolTip("Distanza tra i punti della griglia. Più fitta = più precisa e più lenta.")
+        self.hm_margin.setToolTip("Quanto allargare l'area oltre l'ingombro del lavoro.")
+        self.hm_depth.setToolTip("Massima discesa sotto lo zero: se non c'è contatto entro questa quota la tastatura si ferma.")
+        self.hm_feed.setToolTip("Velocità di discesa durante la tastatura (lenta = più precisa).")
+        self.hm_clear.setToolTip("Dopo il primo punto la fresa scende veloce fino a questa distanza sopra l'ultimo contatto.")
+        self.hm_thick.setToolTip("Spessore di un'eventuale piastrina sopra il pezzo (0 se la fresa tocca direttamente il materiale).")
+        grid = QGridLayout()
+        grid.setSpacing(6)
+        for r, (a, wa, b, wb) in enumerate((("Passo", self.hm_step, "Margine", self.hm_margin),
+                                            ("Prof. max", self.hm_depth, "Velocità", self.hm_feed),
+                                            ("Avvicin.", self.hm_clear, "Piastrina", self.hm_thick))):
+            for col, (lab, w) in enumerate(((a, wa), (b, wb))):
+                grid.addWidget(QLabel(lab), r, col * 2)
+                grid.addWidget(w, r, col * 2 + 1)
+        c.body.addLayout(grid)
+        row = QHBoxLayout()
+        self.btn_hm_probe = QPushButton("Tasta area del lavoro")
+        self.btn_hm_probe.setObjectName("primary")
+        self.btn_hm_probe.setIcon(icon("probe"))
+        self.btn_hm_probe.setToolTip("Misura la superficie con la sonda su una griglia che copre l'ingombro del G-code")
+        self.btn_hm_probe.clicked.connect(self.start_heightmap)
+        self.btn_hm_cancel = QPushButton("Annulla")
+        self.btn_hm_cancel.setObjectName("danger")
+        self.btn_hm_cancel.clicked.connect(lambda: self.prober and self.prober.abort())
+        self.btn_hm_cancel.hide()
+        row.addWidget(self.btn_hm_probe, 1)
+        row.addWidget(self.btn_hm_cancel)
+        c.body.addLayout(row)
+        self.hm_bar = QProgressBar()
+        self.hm_bar.setTextVisible(True)
+        self.hm_bar.hide()
+        c.body.addWidget(self.hm_bar)
+        self.hm_label = QLabel("Nessuna mappa")
+        self.hm_label.setObjectName("muted")
+        self.hm_label.setWordWrap(True)
+        c.body.addWidget(self.hm_label)
+        self.chk_hm = QCheckBox("Applica la mappa quando avvio il programma")
+        self.chk_hm.setEnabled(False)
+        self.chk_hm.toggled.connect(lambda _on: self._refresh_heightmap_ui())
+        c.body.addWidget(self.chk_hm)
+        row = QHBoxLayout()
+        self.btn_hm_save = QPushButton("Salva…")
+        self.btn_hm_save.clicked.connect(self.save_heightmap)
+        self.btn_hm_load = QPushButton("Carica…")
+        self.btn_hm_load.clicked.connect(self.load_heightmap)
+        self.btn_hm_clear = QPushButton("Elimina")
+        self.btn_hm_clear.clicked.connect(self.clear_heightmap)
+        for b in (self.btn_hm_save, self.btn_hm_load, self.btn_hm_clear):
+            row.addWidget(b)
+        c.body.addLayout(row)
         lv.addWidget(c)
 
         c = Card("Macro  (tasto destro per modificare)")
@@ -476,8 +550,14 @@ class MainWindow(QMainWindow):
         self.safe_z.setValue(float(self.qs.value("safe_z", 5.0)))
         self.spindle_val.setValue(int(self.qs.value("spindle_s", 1000)))
         self.chk_keys.setChecked(self.qs.value("keys", "false") == "true")
+        for name, w in self._hm_fields():
+            w.setValue(float(self.qs.value(f"hm_{name}", w.value())))
         i = self.baud_combo.findData(int(self.qs.value("baud", 115200)))
         self.baud_combo.setCurrentIndex(max(0, i))
+
+    def _hm_fields(self):
+        return (("step", self.hm_step), ("margin", self.hm_margin), ("depth", self.hm_depth),
+                ("feed", self.hm_feed), ("clear", self.hm_clear), ("thick", self.hm_thick))
 
     def closeEvent(self, e) -> None:
         if self._running:
@@ -491,6 +571,8 @@ class MainWindow(QMainWindow):
         self.qs.setValue("safe_z", self.safe_z.value())
         self.qs.setValue("spindle_s", self.spindle_val.value())
         self.qs.setValue("keys", "true" if self.chk_keys.isChecked() else "false")
+        for name, w in self._hm_fields():
+            self.qs.setValue(f"hm_{name}", w.value())
         self.qs.setValue("baud", self.baud_combo.currentData())
         self.qs.setValue("port", self.port_combo.currentData())
         if self.conn and self.conn.isRunning():
@@ -548,6 +630,12 @@ class MainWindow(QMainWindow):
         c.settingsChanged.connect(self.on_settings)
         c.alarmRaised.connect(self.on_alarm)
         c.probeResult.connect(self.on_probe)
+        if self.prober:
+            self.prober.deleteLater()
+        self.prober = HeightMapProbe(c, self)
+        self.prober.progress.connect(self._on_hm_progress)
+        self.prober.finished.connect(self._on_hm_finished)
+        self.prober.failed.connect(self._on_hm_failed)
         self.status = Status(state="Connecting")
         self.badge.set_state("Connecting")
         self.btn_connect.setText("Connessione…")
@@ -606,6 +694,8 @@ class MainWindow(QMainWindow):
         if self.btn_spindle.isChecked() != spindle_on and not self._running:
             self.btn_spindle.setChecked(spindle_on)
         self._update_envelope()
+        if self.heightmap is not None and self._hm_wco != tuple(st.wco):
+            self._refresh_heightmap_ui()
         self._update_enabled()
 
     def on_alarm(self, code: int, msg: str) -> None:
@@ -665,7 +755,18 @@ class MainWindow(QMainWindow):
         st = self.status.base_state
         conn = self.connected
         idle = conn and st in ("Idle", "Check") and not self._running
+        idle = idle and not self._probing
         self.act_run.setEnabled(bool(idle and self.program and self.program.commands))
+        has_hm = self.heightmap is not None
+        self.btn_hm_probe.setEnabled(bool(idle and st == "Idle" and self.program and len(self.program.path)))
+        self.btn_hm_probe.setVisible(not self._probing)
+        self.btn_hm_cancel.setVisible(self._probing)
+        self.chk_hm.setEnabled(has_hm and not self._probing)
+        self.btn_hm_save.setEnabled(has_hm and not self._probing)
+        self.btn_hm_clear.setEnabled(has_hm and not self._probing)
+        self.btn_hm_load.setEnabled(not self._probing)
+        for w in (self.hm_step, self.hm_margin, self.hm_depth, self.hm_feed, self.hm_clear, self.hm_thick):
+            w.setEnabled(not self._probing)
         self.act_pause.setEnabled(conn and (self._running or st in ("Run", "Hold")))
         self.act_stop.setEnabled(conn and (self._running or st in ("Run", "Hold", "Jog")))
         self.act_pause.setIcon(icon("play" if self._paused or st == "Hold" else "pause"))
@@ -677,7 +778,7 @@ class MainWindow(QMainWindow):
         self.act_probe.setEnabled(bool(idle) and st == "Idle")
         self.act_settings.setEnabled(conn)
         self.act_reload.setEnabled(self.file_path is not None and not self._running)
-        self.pad.setEnabled(bool(conn and st in ("Idle", "Jog") and not self._running))
+        self.pad.setEnabled(bool(conn and st in ("Idle", "Jog") and not self._running and not self._probing))
         for r in self.axes.values():
             r.setEnabled(bool(idle))
         self.btn_spindle.setEnabled(bool(conn and st in ("Idle", "Run", "Hold") and not self._running))
@@ -840,6 +941,144 @@ class MainWindow(QMainWindow):
         else:
             self.console.append("Probe fallito: nessun contatto", "error")
 
+    # ------------------------------------------------------------------ height map (auto-leveling)
+    def _hm_params(self) -> ProbeParams | None:
+        if not (self.program and len(self.program.path)):
+            return None
+        m = self.hm_margin.value()
+        lo, hi = self.program.bounds_min, self.program.bounds_max
+        return ProbeParams(area=(lo[0] - m, lo[1] - m, hi[0] + m, hi[1] + m), step=self.hm_step.value(),
+                           safe_z=max(self.safe_z.value(), self.hm_clear.value() + 1.0), depth=self.hm_depth.value(),
+                           clearance=self.hm_clear.value(), feed=self.hm_feed.value(), thickness=self.hm_thick.value())
+
+    def start_heightmap(self) -> None:
+        p = self._hm_params()
+        if not (p and self.prober and self.connected):
+            return
+        err = p.validate()
+        if err:
+            QMessageBox.warning(self, "Mappa altezze", err)
+            return
+        from .heightmap import grid_axes
+        nx, ny = len(grid_axes(p.area[0], p.area[2], p.step)), len(grid_axes(p.area[1], p.area[3], p.step))
+        secs = (p.safe_z + p.depth) / p.feed * 60 + (nx * ny - 1) * ((p.clearance + 0.5) / p.feed * 60 + 3.0)
+        x0, y0, x1, y1 = p.area
+        if QMessageBox.question(
+                self, "Mappa altezze",
+                f"Verranno tastati {nx * ny} punti ({nx} × {ny}) sull'area X {x0:.1f}…{x1:.1f}, Y {y0:.1f}…{y1:.1f} mm "
+                f"(≈ {format_duration(secs)}).\n\n"
+                "Prima di procedere:\n"
+                "• mandrino SPENTO;\n"
+                "• pinza della sonda collegata alla fresa e al materiale (o piastrina sul pezzo);\n"
+                "• Z0 azzerato sulla superficie nell'origine del lavoro e fresa sollevata sopra il pezzo;\n"
+                f"• la prima discesa parte da Z {p.safe_z:g} e può arrivare fino a Z -{p.depth:g}.\n\n"
+                "La mappa vale solo finché il pezzo non viene spostato. Continuare?") != QMessageBox.Yes:
+            return
+        self._probing = True
+        err = self.prober.start(p)
+        if err:
+            self._probing = False
+            QMessageBox.warning(self, "Mappa altezze", err)
+        else:
+            self.hm_bar.setRange(0, nx * ny)
+            self.hm_bar.setValue(0)
+            self.hm_bar.setFormat("%v / %m punti")
+            self.hm_bar.show()
+            self.tabs.setCurrentIndex(1)
+            self.console.append(f"Tastatura di {nx * ny} punti…", "info")
+        self._update_enabled()
+
+    def _on_hm_progress(self, done: int, total: int) -> None:
+        self.hm_bar.setRange(0, total)
+        self.hm_bar.setValue(done)
+
+    def _on_hm_finished(self, hm: HeightMap) -> None:
+        self._probing = False
+        self.hm_bar.hide()
+        self.heightmap = hm
+        self.chk_hm.setChecked(True)
+        self.console.append(f"Mappa altezze completata: {hm.shape[1]}×{hm.shape[0]} punti, dislivello {hm.spread:.3f} mm", "info")
+        self._refresh_heightmap_ui()
+        self._update_enabled()
+
+    def _on_hm_failed(self, msg: str) -> None:
+        self._probing = False
+        self.hm_bar.hide()
+        self.console.append(msg, "error")
+        self.sb_state.setText("Tastatura interrotta")
+        self._update_enabled()
+        QTimer.singleShot(0, lambda: QMessageBox.warning(self, "Mappa altezze", msg))
+
+    def _refresh_heightmap_ui(self) -> None:
+        hm = self.heightmap
+        if hm is None:
+            self.hm_label.setText("Nessuna mappa")
+            self.view.set_heightmap(None)
+            return
+        x0, y0, x1, y1 = hm.area
+        on = self.chk_hm.isChecked()
+        self.hm_label.setText(f"Mappa {hm.shape[1]}×{hm.shape[0]} punti • dislivello {hm.spread:.3f} mm • {hm.created}<br>"
+                              f"Area (macchina) X {x0:.1f}…{x1:.1f}, Y {y0:.1f}…{y1:.1f} • "
+                              + ("<b>attiva</b>" if on else "disattivata"))
+        self.view.set_heightmap(hm.shifted(self.status.wco))
+        self._hm_wco = tuple(self.status.wco)
+
+    def save_heightmap(self) -> None:
+        if not self.heightmap:
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Salva mappa altezze", "mappa-altezze.json", "Mappa altezze (*.json)")
+        if path:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(self.heightmap.to_json())
+            self.console.append(f"Mappa salvata in {path}", "info")
+
+    def load_heightmap(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Carica mappa altezze", "", "Mappa altezze (*.json)")
+        if not path:
+            return
+        try:
+            with open(path, encoding="utf-8") as f:
+                hm = HeightMap.from_json(f.read())
+        except (OSError, HeightMapError) as e:
+            QMessageBox.warning(self, "Mappa altezze", str(e))
+            return
+        if not hm.complete:
+            QMessageBox.warning(self, "Mappa altezze", "La mappa è incompleta (tastatura interrotta): non può essere usata.")
+            return
+        self.heightmap = hm
+        self.chk_hm.setChecked(False)
+        QMessageBox.information(self, "Mappa altezze", "Mappa caricata ma NON attiva. È valida solo se il pezzo è fermo "
+                                "nella stessa posizione in cui è stata misurata: verifica, poi spunta «Applica la mappa».")
+        self._refresh_heightmap_ui()
+        self._update_enabled()
+
+    def clear_heightmap(self) -> None:
+        self.heightmap = None
+        self.chk_hm.setChecked(False)
+        self._refresh_heightmap_ui()
+        self._update_enabled()
+
+    def _leveled(self, cmds: list[tuple[int, str]]) -> list[tuple[int, str]] | None:
+        """Apply the active height map to the commands about to be streamed; None = do not start."""
+        if not (self.heightmap and self.chk_hm.isChecked()):
+            return cmds
+        work = self.heightmap.shifted(self.status.wco)
+        if self.program and len(self.program.path) and not work.covers(self.program.bounds_min[:2], self.program.bounds_max[:2]):
+            x0, y0, x1, y1 = work.area
+            if QMessageBox.warning(
+                    self, "Mappa altezze",
+                    "Il lavoro esce dall'area mappata (X %.1f…%.1f, Y %.1f…%.1f in coordinate pezzo): fuori dall'area si usa "
+                    "l'altezza del bordo, quindi la profondità non è compensata. Avviare comunque?" % (x0, x1, y0, y1),
+                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
+                return None
+        try:
+            out = correct_program(cmds, work, start=self.status.wpos)
+        except HeightMapError as e:
+            QMessageBox.warning(self, "Mappa altezze", str(e))
+            return None
+        self.console.append(f"Mappa altezze applicata: {len(cmds)} → {len(out)} comandi", "info")
+        return out
+
     # ------------------------------------------------------------------ files
     def dragEnterEvent(self, e) -> None:
         if e.mimeData().hasUrls():
@@ -963,7 +1202,9 @@ class MainWindow(QMainWindow):
     def run_program(self) -> None:
         if not (self.program and self.connected) or not self._confirm_start():
             return
-        self._begin_run(self.program.commands)
+        cmds = self._leveled(self.program.commands)
+        if cmds is not None:
+            self._begin_run(cmds)
 
     def run_from_line(self, line: int) -> None:
         if not (self.program and self.connected) or self._running or self.status.base_state != "Idle":
@@ -975,7 +1216,9 @@ class MainWindow(QMainWindow):
             return
         pre = [(line, c) for c in preamble_for(self.program, line)]
         rest = [(i, c) for i, c in self.program.commands if i >= line]
-        self._begin_run(pre + rest)
+        cmds = self._leveled(pre + rest)
+        if cmds is not None:
+            self._begin_run(cmds)
 
     def _begin_run(self, cmds: list[tuple[int, str]]) -> None:
         self._run_cmds = cmds
@@ -1011,6 +1254,9 @@ class MainWindow(QMainWindow):
         self._update_enabled()
 
     def stop_program(self) -> None:
+        if self._probing and self.prober:
+            self.prober.abort()
+            return
         if self.connected:
             if self._running:
                 self.conn.stop()

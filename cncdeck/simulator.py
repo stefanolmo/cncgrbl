@@ -71,6 +71,7 @@ class SimulatedSerial:
         self._ov_spindle = 100
         self._reports = 0
         self._probe_z = -18.0       # virtual probe plate contact (machine Z)
+        self.probe_surface = None   # optional f(machine_x, machine_y) -> contact Z (tilted/warped test surface)
         self._busy_until = 0.0
         self._stop = False
         self._t = threading.Thread(target=self._run, daemon=True)
@@ -198,10 +199,17 @@ class SimulatedSerial:
         s += f"|FS:{f:.0f},{self._s * self._ov_spindle / 100 if self._spindle != 'M5' else 0:.0f}"
         if self._reports % 10 == 1:
             s += f"|WCO:{wco[0]:.3f},{wco[1]:.3f},{wco[2]:.3f}"
+        if self._pos[2] <= self._surface() + 1e-6:
+            s += "|Pn:P"
         if self._reports % 5 == 0:
             s += f"|Ov:{self._ov_feed},{self._ov_rapid},{self._ov_spindle}"
         s += ">\r\n"
         self._emit(s)
+
+    def _surface(self) -> float:
+        if self.probe_surface is not None:
+            return float(self.probe_surface(self._pos[0], self._pos[1]))
+        return self._probe_z
 
     # ---------- worker ----------
     def _run(self) -> None:
@@ -388,8 +396,9 @@ class SimulatedSerial:
         step = rate / 60.0 * dt * self.speed
         if blk.probe:
             nxt_z = self._pos[2] + (d[2] / dist * step if dist else 0)
-            if nxt_z <= self._probe_z < self._pos[2] + 1e-9:
-                self._pos[2] = self._probe_z
+            surface = self._surface()
+            if nxt_z <= surface < self._pos[2] + 1e-9:
+                self._pos[2] = surface
                 self._planner.clear()
                 self._emit(f"[PRB:{self._pos[0]:.3f},{self._pos[1]:.3f},{self._pos[2]:.3f}:1]\r\n")
                 return

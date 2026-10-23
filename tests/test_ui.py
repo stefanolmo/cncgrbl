@@ -485,3 +485,55 @@ def test_shape_marker_is_a_tab_not_a_cut(win, tmp_path):
     c.generate_now()
     assert pump(lambda: c.btn_send.isEnabled() and not c._dirty, 30)
     assert "(con linguette)" not in c.result.gcode
+
+
+def _tilted(mx, my):
+    return -18.0 + 0.01 * mx + 0.02 * my
+
+
+def test_height_map_probe_then_run_follows_tilted_surface(win, tmp_path):
+    win.conn._ser.probe_surface = _tilted
+    f = tmp_path / "job.nc"
+    f.write_text("G21G90\nG0X0Y0\nG1Z-0.3F300\nG1X20F600\nG1Y20\n")
+    win.load_file(str(f))
+    assert pump(lambda: win.program is not None and len(win.program.commands) == 5)
+    # user zeroes Z on the surface at the origin and lifts the tip
+    win.send("G90G0Z-18")
+    assert pump(lambda: abs(win.status.mpos[2] + 18) < 0.01 and win.status.state == "Idle")
+    win.send("G10L20P0X0Y0Z0")
+    win.send("G0Z5")
+    assert pump(lambda: abs(win.status.wpos[2] - 5) < 0.01 and "P" not in win.status.pins and win.status.state == "Idle")
+    assert win.btn_hm_probe.isEnabled()
+    assert not win.chk_hm.isEnabled()
+    win.hm_feed.setValue(300)
+    win.start_heightmap()
+    assert win._probing and not win.act_run.isEnabled() and not win.pad.isEnabled()
+    assert pump(lambda: not win._probing and win.heightmap is not None, 60)
+    hm = win.heightmap
+    assert hm.complete and hm.shape == (4, 4)       # 24 mm at <=10 mm steps
+    assert hm.z[0, 0] == pytest.approx(_tilted(-2, -2), abs=0.01)
+    assert win.chk_hm.isChecked() and win.view.heightmap is not None
+    assert "attiva" in win.hm_label.text()
+    win.view.grab()          # the relief mesh paints without errors
+    assert pump(lambda: win.status.state == "Idle" and win.act_run.isEnabled())
+    win.run_program()
+    assert pump(lambda: not win._running and win.progress.value() == 1000, 60)
+    assert pump(lambda: win.status.state == "Idle")
+    mp = win.status.mpos
+    assert (mp[0], mp[1]) == pytest.approx((20, 20), abs=0.01)
+    assert mp[2] == pytest.approx(_tilted(20, 20) - 0.3, abs=0.01)
+    # without the map the same program would have cut at the nominal (flat) depth
+    win.chk_hm.setChecked(False)
+    assert win._leveled([(0, "G1X1")]) == [(0, "G1X1")]
+
+
+def test_height_map_refused_for_unsafe_program_and_survives_rezero(win, tmp_path):
+    from cncdeck.heightmap import HeightMap, grid_axes
+    hm = HeightMap.blank(grid_axes(-5, 25, 10), grid_axes(-5, 25, 10))
+    hm.z[:] = -18.0
+    win.heightmap = hm
+    win.chk_hm.setEnabled(True)
+    win.chk_hm.setChecked(True)
+    assert win._leveled([(0, "G92X0"), (1, "G1X5F10")]) is None      # G92 moves the zero: refused (warning patched)
+    win.clear_heightmap()
+    assert win.heightmap is None and not win.chk_hm.isChecked() and win.view.heightmap is None
