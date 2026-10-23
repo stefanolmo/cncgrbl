@@ -299,7 +299,8 @@ class ToolpathView(QWidget):
         spread = hi - lo
         exag = min(300.0, 3.0 / spread) if spread > 1e-4 else 1.0   # a 0.1 mm warp would be invisible at 1:1
         X, Y = np.meshgrid(hm.xs, hm.ys)
-        Z = (np.nan_to_num(z, nan=lo) - lo) * exag
+        mean = float(np.nanmean(z))
+        Z = mean + (np.nan_to_num(z, nan=mean) - mean) * exag    # drawn at its real height: an offset from Z0 is visible
         pts = np.stack([X, Y, Z], axis=-1)
         s = self.project(pts.reshape(-1, 3)).reshape(pts.shape[0], pts.shape[1], 2)
 

@@ -1063,6 +1063,25 @@ class MainWindow(QMainWindow):
         if not (self.heightmap and self.chk_hm.isChecked()):
             return cmds
         work = self.heightmap.shifted(self.status.wco)
+        zlo, zhi = float(work.z.min()), float(work.z.max())
+        depth, safe = self.heightmap.limits or (3.0, 5.0)
+        self.console.append(f"Height map: surface at Z {zlo:.2f}…{zhi:.2f} mm in work coordinates "
+                            f"(work zero now at machine {tuple(round(v, 2) for v in self.status.wco)}"
+                            + (f", at probing time {tuple(round(v, 2) for v in self.heightmap.wco)}" if self.heightmap.wco else "")
+                            + ")", "info")
+        if zlo < -depth - 1.0 or zhi > safe + 1.0:
+            # a map probed with a consistent Z0 stays within [-depth, safe]: anything else means Z0 or the machine position moved
+            ref = work.z_at(0.0, 0.0)
+            if QMessageBox.question(
+                    self, "Height map",
+                    f"The map does not match the current work zero: the surface would be at Z {zlo:.2f}…{zhi:.2f} mm "
+                    f"(probing was limited to Z {-depth:g}…{safe:g} mm). The tool would plunge about {abs(ref):.1f} mm "
+                    "off the intended depth.\n\nCommon causes: Z0 was changed after probing, or GRBL was reset/reconnected "
+                    "(machine coordinates restart from zero).\n\n"
+                    f"Apply the map RELATIVE to the surface height at the work origin ({ref:.2f} mm)? This assumes that "
+                    "Z0 is currently on the surface there. Choose No to cancel and probe again.") != QMessageBox.Yes:
+                return None
+            work = HeightMap(work.xs, work.ys, work.z - ref, work.created, work.note, work.wco, work.limits)
         if self.program and len(self.program.path) and not work.covers(self.program.bounds_min[:2], self.program.bounds_max[:2]):
             x0, y0, x1, y1 = work.area
             if QMessageBox.warning(

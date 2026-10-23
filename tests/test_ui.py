@@ -537,3 +537,28 @@ def test_height_map_refused_for_unsafe_program_and_survives_rezero(win, tmp_path
     assert win._leveled([(0, "G92X0"), (1, "G1X5F10")]) is None      # G92 moves the zero: refused (warning patched)
     win.clear_heightmap()
     assert win.heightmap is None and not win.chk_hm.isChecked() and win.view.heightmap is None
+
+
+def test_height_map_inconsistent_with_current_zero_asks_and_can_go_relative(win, monkeypatch):
+    import numpy as np
+    from cncdeck.heightmap import HeightMap, grid_axes
+    win.send("G90G0Z-8")
+    assert pump(lambda: abs(win.status.mpos[2] + 8) < 0.01 and win.status.state == "Idle")
+    win.send("G10L20P0X0Y0Z0")                         # work zero now at machine Z -8
+    assert pump(lambda: abs(win.status.wco[2] + 8) < 0.01)
+    hm = HeightMap.blank(grid_axes(0, 20, 10), grid_axes(0, 20, 10))
+    hm.z[:] = -18.0                                    # surface 10 mm below the current zero: a stale/shifted map
+    hm.z[0, 0] = -17.9
+    hm.limits = (3.0, 5.0)
+    win.heightmap = hm
+    win.chk_hm.setEnabled(True)
+    win.chk_hm.setChecked(True)
+    asked = []
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: (asked.append(a[2]), QMessageBox.No)[1]))
+    assert win._leveled([(0, "G90"), (1, "G1X5Y5Z-1F100")]) is None
+    assert asked and "does not match" in asked[0]
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.Yes))
+    out = win._leveled([(0, "G90"), (1, "G1X5Y5Z-1F100")])
+    import re
+    z = float(re.search(r"Z(-?[\d.]+)", out[-1][1]).group(1))
+    assert abs(z + 1.0) < 0.2                          # relative to the origin height: depth stays about -1, not -11

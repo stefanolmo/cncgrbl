@@ -47,6 +47,8 @@ class HeightMap:
     z: np.ndarray                       # (ny, nx) machine Z of the *surface*; NaN = not probed yet
     created: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M"))
     note: str = ""
+    wco: tuple | None = None            # work offset (machine coords of the work zero) when it was probed
+    limits: tuple | None = None         # (max depth below Z0, safe Z above Z0) the probing was allowed to use
 
     @classmethod
     def blank(cls, xs, ys) -> "HeightMap":
@@ -72,7 +74,7 @@ class HeightMap:
 
     def shifted(self, wco) -> "HeightMap":
         """The same surface expressed in work coordinates (work = machine - WCO)."""
-        return HeightMap(self.xs - wco[0], self.ys - wco[1], self.z - wco[2], self.created, self.note)
+        return HeightMap(self.xs - wco[0], self.ys - wco[1], self.z - wco[2], self.created, self.note, self.wco, self.limits)
 
     def z_at(self, x: float, y: float) -> float:
         """Bilinear surface height; outside the probed area the nearest edge value is used."""
@@ -94,6 +96,7 @@ class HeightMap:
     # ---------- persistence ----------
     def to_json(self) -> str:
         return json.dumps({"format": FORMAT, "created": self.created, "note": self.note,
+                           "wco": list(self.wco) if self.wco else None, "limits": list(self.limits) if self.limits else None,
                            "xs": self.xs.tolist(), "ys": self.ys.tolist(),
                            "z": [[None if not math.isfinite(v) else v for v in row] for row in self.z.tolist()]})
 
@@ -107,7 +110,9 @@ class HeightMap:
                 raise ValueError("inconsistent dimensions")
             if np.any(np.diff(xs) <= 0) or np.any(np.diff(ys) <= 0):
                 raise ValueError("axes not increasing")
-            return cls(xs, ys, z, d.get("created", ""), d.get("note", ""))
+            wco, limits = d.get("wco"), d.get("limits")
+            return cls(xs, ys, z, d.get("created", ""), d.get("note", ""),
+                       tuple(wco) if wco else None, tuple(limits) if limits else None)
         except (KeyError, TypeError, ValueError) as e:
             raise HeightMapError(f"Invalid height map file: {e}") from e
 

@@ -70,6 +70,8 @@ class HeightMapProbe(QObject):
         self.ys_w = grid_axes(y0, y1, p.step)
         self.order = serpentine(len(self.xs_w), len(self.ys_w))
         self.map = HeightMap.blank(self.xs_w + self.wco[0], self.ys_w + self.wco[1])
+        self.map.wco = self.wco
+        self.map.limits = (p.depth, p.safe_z)
         self.i = 0
         self.last_z_work: float | None = None
         self.active = True
