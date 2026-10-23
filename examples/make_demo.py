@@ -1,7 +1,7 @@
 """Generates examples/demo.nc — a small test job: pocketed plate, holes, engraving, arcs."""
 import math
 
-out = ["(CNC Deck demo - fresa 3 mm, materiale: MDF/legno tenero)", "G21 G90 G17", "G0 Z5", "M3 S800"]
+out = ["(CNC Deck demo - 3 mm end mill, material: MDF / soft wood)", "G21 G90 G17", "G0 Z5", "M3 S800"]
 w, h = 90.0, 60.0
 
 

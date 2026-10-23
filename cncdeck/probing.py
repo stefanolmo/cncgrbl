@@ -22,15 +22,15 @@ class ProbeParams:
     def validate(self) -> str | None:
         x0, y0, x1, y1 = self.area
         if x1 < x0 or y1 < y0:
-            return "Area non valida"
+            return "Invalid area"
         if self.step < 1.0:
-            return "Il passo della griglia deve essere almeno 1 mm"
+            return "The grid step must be at least 1 mm"
         if self.depth <= 0 or self.depth > 20:
-            return "La profondità massima di tastatura deve essere tra 0 e 20 mm"
+            return "The maximum probing depth must be between 0 and 20 mm"
         if self.safe_z <= self.clearance or self.safe_z < 1.0:
-            return "La Z di sicurezza deve essere maggiore dell'avvicinamento (e almeno 1 mm)"
+            return "The safe Z must be greater than the approach distance (and at least 1 mm)"
         if not 1.0 <= self.feed <= 300.0:
-            return "La velocità di tastatura deve essere tra 1 e 300 mm/min"
+            return "The probing feed must be between 1 and 300 mm/min"
         return None
 
 
@@ -54,15 +54,15 @@ class HeightMapProbe(QObject):
     def start(self, p: ProbeParams) -> str | None:
         """Begin probing; returns an error message if it cannot start."""
         if self.active:
-            return "Tastatura già in corso"
+            return "Probing already in progress"
         err = p.validate()
         if err:
             return err
         st = self.conn.status
         if st.base_state != "Idle" or self.conn.is_streaming:
-            return "La macchina deve essere ferma (Idle) e senza programma in esecuzione"
+            return "The machine must be idle with no program running"
         if "P" in st.pins:
-            return "La sonda risulta già chiusa (Pn:P): controlla pinza e collegamenti prima di tastare"
+            return "The probe already reads closed (Pn:P): check the clip and wiring before probing"
         self.p = p
         self.wco = tuple(st.wco)
         x0, y0, x1, y1 = p.area
@@ -82,7 +82,7 @@ class HeightMapProbe(QObject):
     def total(self) -> int:
         return len(self.order) if self.active else 0
 
-    def abort(self, reason: str = "Tastatura interrotta") -> None:
+    def abort(self, reason: str = "Probing aborted") -> None:
         if not self.active:
             return
         self.active = False
@@ -123,8 +123,8 @@ class HeightMapProbe(QObject):
         if abs(mx - (x + self.wco[0])) > 0.1 or abs(my - (y + self.wco[1])) > 0.1:
             return          # a probe made by hand, not ours
         if not ok:
-            self._fail(f"Nessun contatto nel punto {self.i + 1}/{len(self.order)} (X{x:.1f} Y{y:.1f}) entro "
-                       f"{self.p.depth:g} mm sotto lo zero. Controlla pinza e altezza di Z0, poi sblocca ($X) e rialza Z.")
+            self._fail(f"No contact at point {self.i + 1}/{len(self.order)} (X{x:.1f} Y{y:.1f}) within "
+                       f"{self.p.depth:g} mm below zero. Check the clip and the Z0 height, then unlock ($X) and raise Z.")
             return
         iy, ix = self.order[self.i]
         self.map.z[iy, ix] = mz - self.p.thickness
@@ -139,13 +139,13 @@ class HeightMapProbe(QObject):
             self._go(self.i)
 
     def _on_alarm(self, code: int, msg: str) -> None:
-        self._fail(f"Allarme {code} durante la tastatura: {msg}")
+        self._fail(f"Alarm {code} during probing: {msg}")
 
     def _on_console(self, text: str, kind: str) -> None:
         if self.active and kind == "error" and text.startswith("error:"):
-            self._fail(f"GRBL ha rifiutato un comando di tastatura: {text}")
+            self._fail(f"GRBL rejected a probing command: {text}")
 
     def _on_connection(self, ok: bool, _msg: str) -> None:
         if not ok and self.active:
             self.active = False
-            self.failed.emit("Connessione persa durante la tastatura")
+            self.failed.emit("Connection lost during probing")

@@ -24,72 +24,72 @@ RT_SPINDLE_RESET, RT_SPINDLE_PLUS10, RT_SPINDLE_MINUS10, RT_SPINDLE_PLUS1, RT_SP
 RT_SPINDLE_STOP = b"\x9e"
 
 ERRORS = {
-    1: "Comando G-code non riconosciuto (manca una lettera?)",
-    2: "Valore numerico mancante o malformato",
-    3: "Comando '$' non riconosciuto",
-    4: "Valore negativo non ammesso",
-    5: "Homing non abilitato ($22)",
-    6: "Durata minima dell'impulso step troppo breve (< 3 µs)",
-    7: "EEPROM: lettura fallita, valori di default ripristinati",
-    8: "Comando '$' ammesso solo a macchina ferma (Idle)",
-    9: "Comando bloccato: allarme attivo o ciclo di homing in corso",
-    10: "Soft limit non abilitabile senza homing",
-    11: "Riga troppo lunga (max 80 caratteri)",
-    12: "Valore di setting oltre il massimo (frequenza step)",
-    13: "Interruttore di sicurezza (door) aperto",
-    14: "Riga troppo lunga per essere salvata in EEPROM",
-    15: "Jog oltre i limiti di corsa",
-    16: "Comando jog non valido",
-    17: "Laser mode richiede PWM abilitato",
-    20: "Comando G-code non supportato",
-    21: "Conflitto di gruppo modale G-code",
-    22: "Avanzamento (F) non definito",
-    23: "Comando G-code richiede un valore intero",
-    24: "Più comandi G-code usano gli assi nella stessa riga",
-    25: "Comando G-code ripetuto nella stessa riga",
-    26: "Mancano parole asse richieste dal comando",
-    27: "Numero di riga (N) non valido",
-    28: "Manca una parola richiesta (P/L/R...)",
-    29: "Sistema di coordinate G59.x non supportato",
-    30: "G53 solo con G0/G1",
-    31: "Parole asse non utilizzabili in questo modo",
-    32: "G2/G3 richiedono almeno una parola asse nel piano",
-    33: "Target di movimento non valido",
-    34: "Raggio dell'arco non valido",
-    35: "G2/G3 richiedono almeno un offset (IJK) nel piano",
-    36: "Parole del G-code non usate nella riga",
-    37: "Offset di lunghezza utensile G43.1 su asse non supportato",
-    38: "Numero utensile troppo grande",
+    1: "Unrecognised G-code command (missing letter?)",
+    2: "Numeric value missing or malformed",
+    3: "Unrecognised '$' command",
+    4: "Negative value not allowed",
+    5: "Homing not enabled ($22)",
+    6: "Step pulse too short (< 3 µs)",
+    7: "EEPROM read failed, defaults restored",
+    8: "'$' command allowed only when the machine is idle",
+    9: "Command locked out: alarm active or homing cycle running",
+    10: "Soft limits cannot be enabled without homing",
+    11: "Line too long (max 80 characters)",
+    12: "Setting value above the maximum (step frequency)",
+    13: "Safety door open",
+    14: "Line too long to be stored in EEPROM",
+    15: "Jog beyond travel limits",
+    16: "Invalid jog command",
+    17: "Laser mode requires PWM to be enabled",
+    20: "Unsupported G-code command",
+    21: "G-code modal group conflict",
+    22: "Feed rate (F) not defined",
+    23: "G-code command requires an integer value",
+    24: "Several G-code commands use the axes on the same line",
+    25: "G-code command repeated on the same line",
+    26: "Axis words required by the command are missing",
+    27: "Invalid line number (N)",
+    28: "A required word is missing (P/L/R...)",
+    29: "G59.x coordinate system not supported",
+    30: "G53 only works with G0/G1",
+    31: "Axis words cannot be used this way",
+    32: "G2/G3 need at least one axis word in the plane",
+    33: "Invalid motion target",
+    34: "Invalid arc radius",
+    35: "G2/G3 need at least one offset (IJK) in the plane",
+    36: "Unused G-code words on the line",
+    37: "G43.1 tool length offset on this axis is not supported",
+    38: "Tool number too large",
 }
 
 ALARMS = {
-    1: "Hard limit attivato: posizione probabilmente persa, rifare homing",
-    2: "Movimento oltre i limiti di corsa (soft limit)",
-    3: "Reset durante il movimento: posizione persa, rifare homing",
-    4: "Probe fallito: sonda non nella posizione iniziale prevista",
-    5: "Probe fallito: nessun contatto nella corsa prevista",
-    6: "Homing fallito: reset durante il ciclo",
-    7: "Homing fallito: porta aperta durante il ciclo",
-    8: "Homing fallito: finecorsa non attivato",
-    9: "Homing fallito: finecorsa non trovato nella corsa prevista",
+    1: "Hard limit triggered: position probably lost, home again",
+    2: "Motion beyond travel limits (soft limit)",
+    3: "Reset while moving: position lost, home again",
+    4: "Probe failed: probe not in the expected initial state",
+    5: "Probe failed: no contact within the expected travel",
+    6: "Homing failed: reset during the cycle",
+    7: "Homing failed: door opened during the cycle",
+    8: "Homing failed: limit switch not triggered",
+    9: "Homing failed: limit switch not found within the expected travel",
 }
 
 SETTING_INFO: dict[int, tuple[str, str]] = {
-    0: ("Durata impulso step", "µs"), 1: ("Ritardo disattivazione step", "ms"),
-    2: ("Inversione porta step (maschera)", "mask"), 3: ("Inversione direzione (maschera)", "mask"),
-    4: ("Inverti pin enable step", "bool"), 5: ("Inverti pin limit", "bool"),
-    6: ("Inverti pin probe", "bool"), 10: ("Report di stato (maschera)", "mask"),
-    11: ("Junction deviation", "mm"), 12: ("Tolleranza arco", "mm"),
-    13: ("Report in pollici", "bool"), 20: ("Soft limits", "bool"),
-    21: ("Hard limits", "bool"), 22: ("Ciclo di homing", "bool"),
-    23: ("Inversione direzione homing (maschera)", "mask"), 24: ("Feed homing (locate)", "mm/min"),
-    25: ("Seek homing", "mm/min"), 26: ("Debounce homing", "ms"),
-    27: ("Pull-off homing", "mm"), 30: ("Velocità massima mandrino", "RPM"),
-    31: ("Velocità minima mandrino", "RPM"), 32: ("Laser mode", "bool"),
-    100: ("X passi/mm", "step/mm"), 101: ("Y passi/mm", "step/mm"), 102: ("Z passi/mm", "step/mm"),
-    110: ("X velocità massima", "mm/min"), 111: ("Y velocità massima", "mm/min"), 112: ("Z velocità massima", "mm/min"),
-    120: ("X accelerazione", "mm/s²"), 121: ("Y accelerazione", "mm/s²"), 122: ("Z accelerazione", "mm/s²"),
-    130: ("X corsa massima", "mm"), 131: ("Y corsa massima", "mm"), 132: ("Z corsa massima", "mm"),
+    0: ("Step pulse time", "µs"), 1: ("Step idle delay", "ms"),
+    2: ("Step port invert (mask)", "mask"), 3: ("Direction invert (mask)", "mask"),
+    4: ("Invert step enable pin", "bool"), 5: ("Invert limit pins", "bool"),
+    6: ("Invert probe pin", "bool"), 10: ("Status report (mask)", "mask"),
+    11: ("Junction deviation", "mm"), 12: ("Arc tolerance", "mm"),
+    13: ("Report in inches", "bool"), 20: ("Soft limits", "bool"),
+    21: ("Hard limits", "bool"), 22: ("Homing cycle", "bool"),
+    23: ("Homing direction invert (mask)", "mask"), 24: ("Homing feed (locate)", "mm/min"),
+    25: ("Homing seek", "mm/min"), 26: ("Homing debounce", "ms"),
+    27: ("Homing pull-off", "mm"), 30: ("Maximum spindle speed", "RPM"),
+    31: ("Minimum spindle speed", "RPM"), 32: ("Laser mode", "bool"),
+    100: ("X steps/mm", "step/mm"), 101: ("Y steps/mm", "step/mm"), 102: ("Z steps/mm", "step/mm"),
+    110: ("X maximum rate", "mm/min"), 111: ("Y maximum rate", "mm/min"), 112: ("Z maximum rate", "mm/min"),
+    120: ("X acceleration", "mm/s²"), 121: ("Y acceleration", "mm/s²"), 122: ("Z acceleration", "mm/s²"),
+    130: ("X maximum travel", "mm"), 131: ("Y maximum travel", "mm"), 132: ("Z maximum travel", "mm"),
 }
 
 
@@ -299,14 +299,14 @@ class GrblConnection(QThread):
         try:
             self._ser = self._open()
         except (serial.SerialException, OSError) as e:
-            self.connectionChanged.emit(False, f"Impossibile aprire {self.port}: {e}")
+            self.connectionChanged.emit(False, f"Cannot open {self.port}: {e}")
             return
         try:
             self._handshake()
             self._loop()
         except (serial.SerialException, OSError) as e:
-            self.console.emit(f"Connessione persa: {e}", "error")
-            self.connectionChanged.emit(False, f"Connessione persa: {e}")
+            self.console.emit(f"Connection lost: {e}", "error")
+            self.connectionChanged.emit(False, f"Connection lost: {e}")
             self._finalize(False)
             return
         self._finalize(True)
@@ -326,7 +326,7 @@ class GrblConnection(QThread):
         except Exception:
             pass
         if clean:
-            self.connectionChanged.emit(False, "Disconnesso")
+            self.connectionChanged.emit(False, "Disconnected")
         self._connected = False
 
     def _handshake(self) -> None:
@@ -345,10 +345,10 @@ class GrblConnection(QThread):
                 self._ser.write(RT_RESET)
                 nudged = True
             if dt > 5.0:
-                raise serial.SerialException("Nessuna risposta da GRBL (baudrate o porta errati?)")
+                raise serial.SerialException("No response from GRBL (wrong baud rate or port?)")
         if self._stop_thread:
             return
-        self.connectionChanged.emit(True, f"Connesso a {self.port}")
+        self.connectionChanged.emit(True, f"Connected to {self.port}")
         for cmd in ("$I", "$$", "$G"):
             self._manual.append((cmd, -2))
 
@@ -404,7 +404,7 @@ class GrblConnection(QThread):
             self._ser.write(RT_RESET)
             self._pending.clear()
             self._reset_at = time.monotonic()
-            self.console.emit("Programma interrotto, reset di GRBL", "info")
+            self.console.emit("Program aborted, GRBL reset", "info")
 
     def _rx_used(self) -> int:
         return sum(p.nbytes for p in self._pending)
@@ -467,8 +467,8 @@ class GrblConnection(QThread):
                 code = int(line[6:])
             except ValueError:
                 code = -1
-            msg = ALARMS.get(code, "Allarme sconosciuto")
-            self.console.emit(f"ALLARME {code}: {msg}", "alarm")
+            msg = ALARMS.get(code, "Unknown alarm")
+            self.console.emit(f"ALARM {code}: {msg}", "alarm")
             self.alarmRaised.emit(code, msg)
             if self._running:
                 with self._lock:
@@ -502,7 +502,7 @@ class GrblConnection(QThread):
     def _on_ack(self, ok: bool, code: int) -> None:
         if not self._pending:
             if time.monotonic() - self._reset_at > 1.5:  # right after a reset, in-flight replies are expected
-                self.console.emit("ok/error senza comando in coda (sincronizzazione persa?)", "error")
+                self.console.emit("ok/error with no command queued (sync lost?)", "error")
             return
         p = self._pending.popleft()
         if p.tag == -1:
@@ -519,7 +519,7 @@ class GrblConnection(QThread):
             self._acked = p.tag + 1
             if not ok:
                 src = self._program[p.tag][0] if p.tag < len(self._program) else -1
-                self.console.emit(f"error:{code} {ERRORS.get(code, '')} - riga {src + 1}: {p.text}", "error")
+                self.console.emit(f"error:{code} {ERRORS.get(code, '')} - line {src + 1}: {p.text}", "error")
                 with self._lock:
                     self._error_hold = True
                 self.send_realtime(RT_HOLD)

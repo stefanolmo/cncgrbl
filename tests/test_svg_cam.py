@@ -51,7 +51,7 @@ def test_import_curves_arcs_and_open_paths():
     assert ids["a"].subpaths[0].closed and not ids["b"].subpaths[0].closed
     lo = ids["a"].subpaths[0].points.min(0)
     assert lo[1] == pytest.approx(10, abs=0.05)                  # half circle apex
-    assert any("Testo" in w for w in d.warnings)
+    assert any("Text" in w for w in d.warnings)
 
 
 def test_import_invalid_svg():
@@ -105,8 +105,8 @@ def test_holes_respect_fill_rule_and_combine():
            '<path id="ring" fill-rule="evenodd" d="M5,5 H55 V55 H5 Z M20,20 H40 V40 H20 Z"/></svg>')
     d = parse_svg(svg)
     res = cam.generate(d, [cam.Operation(kind="outside", cut_depth=1, pass_depth=1)], cam.Job(tool_diameter=2, origin="svg"))
-    assert res.gcode.count("; Percorso") == 2                   # outer boundary + hole boundary, never joined
-    for block in res.gcode.split("; Percorso")[1:]:
+    assert res.gcode.count("; Path") == 2                   # outer boundary + hole boundary, never joined
+    for block in res.gcode.split("; Path")[1:]:
         a = xy(block)
         for p, q in zip(a[:-1], a[1:]):                 # consecutive cutting moves of ONE path
             for t in np.linspace(0, 1, 60):
@@ -117,7 +117,7 @@ def test_holes_respect_fill_rule_and_combine():
                    '<rect id="a" x="0" y="0" width="30" height="30"/><rect id="b" x="20" y="20" width="30" height="30"/></svg>')
     u = cam.generate(d2, [cam.Operation(kind="outside", combine="union")], cam.Job(tool_diameter=2, origin="svg"))
     i = cam.generate(d2, [cam.Operation(kind="outside", combine="intersect")], cam.Job(tool_diameter=2, origin="svg"))
-    assert u.gcode.count("; Percorso") == 1 and i.gcode.count("; Percorso") == 1
+    assert u.gcode.count("; Path") == 1 and i.gcode.count("; Path") == 1
     ib = xy(i.gcode)
     assert ib[:, 0].min() == pytest.approx(19, abs=0.05) and ib[:, 0].max() == pytest.approx(31, abs=0.05)
 
@@ -139,7 +139,7 @@ def test_design_guides_follow_origin_convention():
 
 def test_tool_too_big_warns():
     res = cam.generate(doc(), [cam.Operation(kind="inside")], cam.Job(tool_diameter=40))
-    assert any("troppo grande" in w for w in res.warnings)
+    assert any("too large" in w for w in res.warnings)
 
 
 @pytest.mark.parametrize("kind,climb,ccw", [("outside", False, False), ("outside", True, True),
@@ -163,10 +163,10 @@ def test_origin_conventions():
 
 def test_generated_gcode_is_clean_for_the_sender():
     d = parse_svg(open("examples/demo.svg").read())
-    ops = [cam.Operation(name="foro", kind="pocket", shapes={"foro"}, cut_depth=2, pass_depth=0.7),
-           cam.Operation(name="stella", kind="pocket", shapes={"stella"}, cut_depth=1.0, pass_depth=0.5),
-           cam.Operation(name="onda", kind="engrave", shapes={"onda"}, cut_depth=0.4, pass_depth=0.4),
-           cam.Operation(name="taglio", kind="outside", shapes={"contorno"}, cut_depth=3, pass_depth=1, ramp=True)]
+    ops = [cam.Operation(name="hole", kind="pocket", shapes={"hole"}, cut_depth=2, pass_depth=0.7),
+           cam.Operation(name="star", kind="pocket", shapes={"star"}, cut_depth=1.0, pass_depth=0.5),
+           cam.Operation(name="wave", kind="engrave", shapes={"wave"}, cut_depth=0.4, pass_depth=0.4),
+           cam.Operation(name="cut", kind="outside", shapes={"outline"}, cut_depth=3, pass_depth=1, ramp=True)]
     res = cam.generate(d, ops, cam.Job(origin="top-left"), "demo.svg")
     lines = res.gcode.splitlines()
     prog = parse_program(res.gcode)
@@ -246,7 +246,7 @@ def test_auto_tabs_leave_material_only_on_the_last_pass():
     assert sum(1 for l in lines if l.startswith("G1 Z-2")) == 4                    # 4 lifts
     assert sum(1 for l in lines if l.startswith("G1 Z-3")) == 1 + 4                # initial plunge + 4 returns to depth
     assert sum(1 for l in lines if l.startswith("G1 Z-1.5")) == 1                  # shallower pass: no tab logic
-    assert "(con linguette)" in res.gcode
+    assert "(with tabs)" in res.gcode
     # Z moves at tab boundaries are purely vertical (no diagonal plunge into the material)
     assert not any(re.search(r"X.*Z|Z.*X", l) for l in lines if l.startswith("G1"))
 
@@ -267,7 +267,7 @@ def test_tab_shapes_mode_marks_the_path_where_a_marker_touches_it():
            '<rect id="part" x="10" y="10" width="40" height="30"/><circle id="mark" cx="30" cy="10" r="3"/></svg>')
     d = parse_svg(svg)
     res = cam.generate(d, [tab_op(tab_mode="shapes", tab_shapes={"mark"}, shapes=None)], cam.Job(tool_diameter=3.0, origin="svg"))
-    assert res.gcode.count("; Percorso") == 1                    # the marker itself is not cut
+    assert res.gcode.count("; Path") == 1                    # the marker itself is not cut
     a, b = flat_segments(res.gcode, -2.0)
     assert len(a) > 0
     centre = np.array([30.0, -10.0])                            # marker centre in G-code coordinates (svg origin)
@@ -282,7 +282,7 @@ def test_holes_get_no_auto_tabs_but_part_contours_do():
            '<path fill-rule="evenodd" d="M5,5 H55 V55 H5 Z M20,20 H40 V40 H20 Z"/></svg>')
     d = parse_svg(svg)
     res = cam.generate(d, [tab_op()], cam.Job(tool_diameter=2.0, origin="svg"))
-    assert res.gcode.count("; Percorso") == 2 and res.gcode.count("(con linguette)") == 1
+    assert res.gcode.count("; Path") == 2 and res.gcode.count("(with tabs)") == 1
 
 
 def test_tabs_are_ignored_for_pocket_engrave_and_when_invalid():
@@ -291,14 +291,14 @@ def test_tabs_are_ignored_for_pocket_engrave_and_when_invalid():
     assert cam.generate(d, [cam.Operation(kind="pocket", cut_depth=3, pass_depth=1.5, tab_mode="auto")], cam.Job()).gcode == plain
     base = cam.generate(d, [cam.Operation(kind="outside", cut_depth=3, pass_depth=1.5)], cam.Job())
     bad = cam.generate(d, [tab_op(tab_height=3.0)], cam.Job())                 # as tall as the cut: nothing to cut
-    assert bad.gcode == base.gcode and any("linguette ignorate" in w for w in bad.warnings)
+    assert bad.gcode == base.gcode and any("tabs ignored" in w for w in bad.warnings)
     wide = cam.generate(d, [tab_op(width=10.0)], cam.Job())
-    assert any("una sola passata" in w for w in wide.warnings)
+    assert any("single pass" in w for w in wide.warnings)
     none = cam.generate(d, [tab_op(tab_mode="shapes", tab_shapes=set())], cam.Job())
-    assert none.gcode == base.gcode and any("nessuna forma linguetta" in w for w in none.warnings)
+    assert none.gcode == base.gcode and any("no tab shape" in w for w in none.warnings)
     tiny = cam.generate(parse_svg('<svg xmlns="http://www.w3.org/2000/svg" width="20mm" height="20mm" viewBox="0 0 20 20">'
                                   '<rect x="8" y="8" width="3" height="3"/></svg>'), [tab_op(tab_width=8.0)], cam.Job(tool_diameter=1.0))
-    assert any("troppo corto" in w for w in tiny.warnings) and "(con linguette)" not in tiny.gcode
+    assert any("too short" in w for w in tiny.warnings) and "(with tabs)" not in tiny.gcode
 
 
 def test_tabs_with_ramp_never_cut_below_tab_height_in_the_tab():
@@ -318,7 +318,7 @@ def test_tabs_with_ramp_never_cut_below_tab_height_in_the_tab():
 
 def test_tabs_job_is_clean_for_the_sender():
     d = parse_svg(open("examples/demo.svg").read())
-    res = cam.generate(d, [tab_op(shapes={"contorno"}, tab_count=6, cut_depth=3, pass_depth=1)], cam.Job())
+    res = cam.generate(d, [tab_op(shapes={"outline"}, tab_count=6, cut_depth=3, pass_depth=1)], cam.Job())
     prog = parse_program(res.gcode)
     assert not prog.warnings and max(len(c) for _, c in prog.commands) <= 40
     assert prog.bounds_min[2] == pytest.approx(-3.0, abs=1e-3) and res.gcode.splitlines()[-1] == "M2"

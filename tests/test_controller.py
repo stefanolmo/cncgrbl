@@ -102,7 +102,7 @@ def test_pause_resume_stop(app, conn):
     assert pump(app, lambda: "aborted" in conn.state["program"])
     assert pump(app, lambda: conn.state["status"].state == "Idle")
     assert conn.state["status"].mpos[0] > 0  # position preserved after hold+reset
-    assert not any("sincronizzazione" in t for k, t in conn.state["console"])
+    assert not any("sync lost" in t for k, t in conn.state["console"])
 
 
 def test_error_pauses_program(app, conn):

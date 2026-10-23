@@ -15,12 +15,12 @@ from .svgimport import SvgDoc, parse_svg
 from .viewer import ToolpathView, add_view_buttons
 from .widgets import Card, CodeEditor
 
-KINDS = [("outside", "Esterno (profilo fuori)"), ("inside", "Interno (profilo dentro)"),
-         ("pocket", "Tasca (svuotamento)"), ("engrave", "Incisione (linea centrale)")]
-TABMODES = [("none", "Nessuna"), ("auto", "Automatiche (equidistanti)"), ("shapes", "Da forme SVG (segnaposto)")]
-COMBINE = [("union", "Unione"), ("intersect", "Intersezione"), ("diff", "Differenza"), ("xor", "XOR")]
-ORIGINS = [("top-left", "Angolo alto-sinistro del disegno"), ("bottom-left", "Angolo basso-sinistro del disegno"),
-           ("svg", "Origine della pagina SVG (come jscut)")]
+KINDS = [("outside", "Outside (profile outside)"), ("inside", "Inside (profile inside)"),
+         ("pocket", "Pocket (clearing)"), ("engrave", "Engrave (centre line)")]
+TABMODES = [("none", "None"), ("auto", "Automatic (evenly spaced)"), ("shapes", "From SVG shapes (markers)")]
+COMBINE = [("union", "Union"), ("intersect", "Intersection"), ("diff", "Difference"), ("xor", "XOR")]
+ORIGINS = [("top-left", "Top-left corner of the design"), ("bottom-left", "Bottom-left corner of the design"),
+           ("svg", "SVG page origin (like jscut)")]
 
 
 class GenThread(QThread):
@@ -35,7 +35,7 @@ class GenThread(QThread):
             res = cam.generate(self.doc, self.ops, self.job, self.name)
             prog = parse_program(res.gcode) if res.gcode else None
         except Exception as e:  # never let a CAM failure kill the thread silently
-            res = cam.CamResult(warnings=[f"Errore di conversione: {e}"])
+            res = cam.CamResult(warnings=[f"Conversion error: {e}"])
             prog = None
         self.done.emit(res, prog, self.serial_no)
 
@@ -96,27 +96,27 @@ class ConverterPage(QWidget):
         lv.setSpacing(10)
 
         # --- file
-        c = Card("File SVG")
+        c = Card("SVG file")
         row = QHBoxLayout()
-        b = QPushButton("Apri SVG…")
+        b = QPushButton("Open SVG…")
         b.setObjectName("primary")
         b.clicked.connect(self.open_svg)
-        self.file_label = QLabel("Nessun file")
+        self.file_label = QLabel("No file")
         self.file_label.setObjectName("muted")
         self.file_label.setWordWrap(True)
         row.addWidget(b)
         row.addWidget(self.file_label, 1)
         c.body.addLayout(row)
         row = QHBoxLayout()
-        row.addWidget(QLabel("Risoluzione"))
+        row.addWidget(QLabel("Resolution"))
         self.dpi = QSpinBox()
         self.dpi.setRange(10, 1200)
         self.dpi.setValue(int(self.qs.value("conv/dpi", 96)))
-        self.dpi.setSuffix(" px/pollice")
-        self.dpi.setToolTip("Dimensione dei px nell'SVG privo di unità: 96 (standard CSS, Inkscape ≥ 0.92) o 72/90 (vecchi file)")
+        self.dpi.setSuffix(" px/inch")
+        self.dpi.setToolTip("Size of px in a unit-less SVG: 96 (CSS standard, Inkscape ≥ 0.92) or 72/90 (old files)")
         self.dpi.editingFinished.connect(self._reload_svg)
         row.addWidget(self.dpi, 1)
-        row.addWidget(QLabel("Scala"))
+        row.addWidget(QLabel("Scale"))
         self.scale = _dspin(1, 1000, 100.0, 1, " %")
         self.scale.editingFinished.connect(self._reload_svg)
         row.addWidget(self.scale)
@@ -124,15 +124,15 @@ class ConverterPage(QWidget):
         lv.addWidget(c)
 
         # --- operations
-        c = Card("Operazioni")
+        c = Card("Operations")
         self.ops_list = QListWidget()
         self.ops_list.setMaximumHeight(110)
         self.ops_list.currentRowChanged.connect(self._op_selected)
         c.body.addWidget(self.ops_list)
         row = QHBoxLayout()
         self._op_btns: list[QPushButton] = []       # need an existing operation to act on
-        for i, (text, slot) in enumerate((("＋ Aggiungi", self._add_op), ("Duplica", self._dup_op),
-                                          ("Rimuovi", self._del_op), ("▲", lambda: self._move_op(-1)),
+        for i, (text, slot) in enumerate((("＋ Add", self._add_op), ("Duplicate", self._dup_op),
+                                          ("Remove", self._del_op), ("▲", lambda: self._move_op(-1)),
                                           ("▼", lambda: self._move_op(1)))):
             bt = QPushButton(text)
             bt.clicked.connect(slot)
@@ -146,31 +146,31 @@ class ConverterPage(QWidget):
         self.w_name = QLineEdit()
         self.w_kind = _combo(KINDS)
         self.w_combine = _combo(COMBINE)
-        self.w_dir = _combo([("conv", "Convenzionale"), ("climb", "Concorde (climb)")])
+        self.w_dir = _combo([("conv", "Conventional"), ("climb", "Climb")])
         self.w_cut = _dspin(0.01, 100, 1.0, 2, " mm", 0.1)
         self.w_pass = _dspin(0.01, 50, 0.5, 2, " mm", 0.1)
         self.w_step = _dspin(5, 100, 40.0, 0, " %", 5)
         self.w_width = _dspin(0, 100, 0.0, 2, " mm", 0.5)
         self.w_margin = _dspin(-20, 20, 0.0, 2, " mm", 0.1)
-        self.w_ramp = QCheckBox("Entrata a rampa (invece del tuffo verticale)")
+        self.w_ramp = QCheckBox("Ramp entry (instead of a vertical plunge)")
         self.w_tabmode = _combo(TABMODES)
         self.w_tabcount = QSpinBox()
         self.w_tabcount.setRange(1, 50)
         self.w_tabcount.setValue(4)
         self.w_tabw = _dspin(0.5, 100, 4.0, 1, " mm", 0.5)
         self.w_tabh = _dspin(0.1, 50, 1.0, 2, " mm", 0.1)
-        self.w_tabmode.setToolTip("Linguette di fissaggio: lungo il taglio dei contorni la fresa resta alta, così il pezzo non si stacca "
-                                  "e non si muove. Solo per Esterno/Interno. Poi si tagliano con il seghetto/bisturi.")
-        self.w_tabcount.setToolTip("Automatiche: numero di linguette su ogni contorno di pezzo (i fori non ne hanno)")
-        self.w_tabw.setToolTip("Lunghezza di ogni linguetta lungo il percorso")
-        self.w_tabh.setToolTip("Altezza di materiale lasciata sotto la linguetta (dal fondo del taglio)")
-        self.w_cut.setToolTip("Profondità totale sotto la superficie del materiale (Z = 0)")
-        self.w_step.setToolTip("Distanza tra passate affiancate, in % del diametro utensile (jscut: step over)")
-        self.w_width.setToolTip("Larghezza della fascia lavorata per Esterno/Interno; 0 = una sola passata (= diametro utensile)")
-        self.w_margin.setToolTip("Allarga (Esterno) o restringe (Interno) la geometria prima di calcolare il percorso")
-        rows = [("Nome", self.w_name), ("Tipo", self.w_kind), ("Combina forme", self.w_combine),
-                ("Direzione", self.w_dir), ("Profondità", self.w_cut), ("Per passata", self.w_pass),
-                ("Step over", self.w_step), ("Larghezza", self.w_width), ("Margine", self.w_margin)]
+        self.w_tabmode.setToolTip("Holding tabs: along the contour cut the tool stays raised so the part does not detach "
+                                  "or move. Outside/Inside only. Cut them afterwards with a saw/knife.")
+        self.w_tabcount.setToolTip("Automatic: number of tabs on each part contour (holes get none)")
+        self.w_tabw.setToolTip("Length of each tab along the path")
+        self.w_tabh.setToolTip("Height of material left under the tab (from the bottom of the cut)")
+        self.w_cut.setToolTip("Total depth below the material surface (Z = 0)")
+        self.w_step.setToolTip("Distance between side-by-side passes, in % of the tool diameter (jscut: step over)")
+        self.w_width.setToolTip("Width of the machined band for Outside/Inside; 0 = a single pass (= tool diameter)")
+        self.w_margin.setToolTip("Grows (Outside) or shrinks (Inside) the geometry before computing the path")
+        rows = [("Name", self.w_name), ("Type", self.w_kind), ("Combine shapes", self.w_combine),
+                ("Direction", self.w_dir), ("Depth", self.w_cut), ("Per pass", self.w_pass),
+                ("Step over", self.w_step), ("Width", self.w_width), ("Offset", self.w_margin)]
         for i, (lab, w) in enumerate(rows):
             g.addWidget(QLabel(lab), i, 0)
             g.addWidget(w, i, 1)
@@ -179,19 +179,19 @@ class ConverterPage(QWidget):
         tg = QGridLayout()
         tg.setHorizontalSpacing(8)
         tg.setVerticalSpacing(6)
-        self.tab_widgets = [(QLabel("Linguette"), self.w_tabmode), (QLabel("  Numero"), self.w_tabcount),
-                            (QLabel("  Larghezza"), self.w_tabw), (QLabel("  Altezza"), self.w_tabh)]
+        self.tab_widgets = [(QLabel("Tabs"), self.w_tabmode), (QLabel("  Count"), self.w_tabcount),
+                            (QLabel("  Width"), self.w_tabw), (QLabel("  Height"), self.w_tabh)]
         for i, (lab, w) in enumerate(self.tab_widgets):
             tg.addWidget(lab, i, 0)
             tg.addWidget(w, i, 1)
         c.body.addLayout(tg)
-        self.tab_shapes_label = QLabel("Forme usate come linguette (non vengono fresate)")
+        self.tab_shapes_label = QLabel("Shapes used as tabs (they are not milled)")
         self.tab_shape_list = QListWidget()
         self.tab_shape_list.setMaximumHeight(100)
         self.tab_shape_list.itemChanged.connect(self._tabshapes_changed)
         c.body.addWidget(self.tab_shapes_label)
         c.body.addWidget(self.tab_shape_list)
-        c.body.addWidget(QLabel("Forme usate da questa operazione"))
+        c.body.addWidget(QLabel("Shapes used by this operation"))
         self.shape_list = QListWidget()
         self.shape_list.setMaximumHeight(120)
         self.shape_list.itemChanged.connect(self._shapes_changed)
@@ -208,7 +208,7 @@ class ConverterPage(QWidget):
         self.w_ramp.toggled.connect(self._op_edited)
 
         # --- tool & job
-        c = Card("Utensile e velocità")
+        c = Card("Tool and speeds")
         g = QGridLayout()
         g.setHorizontalSpacing(8)
         g.setVerticalSpacing(6)
@@ -217,17 +217,17 @@ class ConverterPage(QWidget):
         self.j_cut = _dspin(1, 20000, float(q.value("conv/cut", 500)), 0, " mm/min", 50)
         self.j_plunge = _dspin(1, 20000, float(q.value("conv/plunge", 150)), 0, " mm/min", 10)
         self.j_safe = _dspin(0.5, 100, float(q.value("conv/safe", 5.0)), 1, " mm", 0.5)
-        self.j_spindle = QCheckBox("Avvia mandrino (M3) / spegni (M5)")
+        self.j_spindle = QCheckBox("Start spindle (M3) / stop (M5)")
         self.j_spindle.setChecked(q.value("conv/spindle", "false") == "true")
         self.j_rpm = _dspin(1, 100000, float(q.value("conv/rpm", 1000)), 0, "  S", 100)
-        self.j_units = _combo([("mm", "Millimetri (G21)"), ("in", "Pollici (G20)")])
+        self.j_units = _combo([("mm", "Millimetres (G21)"), ("in", "Inches (G20)")])
         self.j_origin = _combo(ORIGINS)
         self.j_origin.setCurrentIndex(max(0, self.j_origin.findData(q.value("conv/origin", "top-left"))))
         self.j_units.setCurrentIndex(max(0, self.j_units.findData(q.value("conv/units", "mm"))))
-        self.j_origin.setToolTip("Dove sta lo zero del G-code rispetto al disegno. Il tuo zero pezzo deve coincidere con questo punto.")
-        self.j_spindle.setToolTip("Disattivato come jscut: il mandrino resta gestito da te (pulsante Mandrino del Sender)")
-        jrows = [("Utensile Ø", self.j_tool), ("Avanzamento", self.j_cut), ("Tuffo", self.j_plunge),
-                 ("Z di sicurezza", self.j_safe), ("Unità G-code", self.j_units), ("Zero G-code", self.j_origin)]
+        self.j_origin.setToolTip("Where the G-code zero sits relative to the design. Your work zero must coincide with this point.")
+        self.j_spindle.setToolTip("Off by default, like jscut: the spindle stays under your control (Spindle button in the Sender)")
+        jrows = [("Tool Ø", self.j_tool), ("Feed rate", self.j_cut), ("Plunge", self.j_plunge),
+                 ("Safe Z", self.j_safe), ("G-code units", self.j_units), ("G-code zero", self.j_origin)]
         for i, (lab, w) in enumerate(jrows):
             g.addWidget(QLabel(lab), i, 0)
             g.addWidget(w, i, 1)
@@ -245,14 +245,14 @@ class ConverterPage(QWidget):
 
         # --- actions
         c = Card("G-code")
-        self.btn_gen = QPushButton("Genera G-code")
+        self.btn_gen = QPushButton("Generate G-code")
         self.btn_gen.clicked.connect(self.generate_now)
         row = QHBoxLayout()
-        self.btn_save = QPushButton("Salva .gcode…")
+        self.btn_save = QPushButton("Save .gcode…")
         self.btn_save.clicked.connect(self.save_gcode)
-        self.btn_send = QPushButton("Invia alla CNC  ➜")
+        self.btn_send = QPushButton("Send to CNC  ➜")
         self.btn_send.setObjectName("primary")
-        self.btn_send.setToolTip("Carica il G-code nel Sender senza salvare il file; poi avvia dal Sender")
+        self.btn_send.setToolTip("Load the G-code into the Sender without saving a file; then start from the Sender")
         self.btn_send.clicked.connect(self._send)
         row.addWidget(self.btn_save)
         row.addWidget(self.btn_send, 1)
@@ -293,8 +293,8 @@ class ConverterPage(QWidget):
         self.editor.setReadOnly(True)
         self.messages = QPlainTextEdit()
         self.messages.setReadOnly(True)
-        tabs.addTab(self.editor, "G-code generato")
-        tabs.addTab(self.messages, "Messaggi")
+        tabs.addTab(self.editor, "Generated G-code")
+        tabs.addTab(self.messages, "Messages")
         self.tabs = tabs
         bv.addWidget(tabs)
         right.addWidget(bottom)
@@ -306,7 +306,7 @@ class ConverterPage(QWidget):
     # ------------------------------------------------------------------ SVG
     def open_svg(self) -> None:
         d = self.qs.value("conv/last_dir", os.path.expanduser("~"))
-        path, _ = QFileDialog.getOpenFileName(self, "Apri SVG", d, "SVG (*.svg);;Tutti i file (*)")
+        path, _ = QFileDialog.getOpenFileName(self, "Open SVG", d, "SVG (*.svg);;All files (*)")
         if path:
             self.load_svg(path)
 
@@ -333,7 +333,7 @@ class ConverterPage(QWidget):
         self.doc = parse_svg(self._svg_text, dpi=float(self.dpi.value()), scale=self.scale.value() / 100.0)
         name = os.path.basename(self.svg_path or "")
         n = len(self.doc.shapes)
-        self.file_label.setText(f"{name}\n{n} forme, {self.doc.width_mm:.1f} × {self.doc.height_mm:.1f} mm")
+        self.file_label.setText(f"{name}\n{n} shapes, {self.doc.width_mm:.1f} × {self.doc.height_mm:.1f} mm")
         valid = {s.sid for s in self.doc.shapes}
         for op in self.ops:
             if op.shapes is not None:
@@ -418,7 +418,7 @@ class ConverterPage(QWidget):
         op = self.cur_op()
         if self._loading or op is None:
             return
-        op.name = self.w_name.text() or "Operazione"
+        op.name = self.w_name.text() or "Operation"
         op.kind = self.w_kind.currentData()
         op.combine = self.w_combine.currentData()
         op.climb = self.w_dir.currentData() == "climb"
@@ -437,7 +437,7 @@ class ConverterPage(QWidget):
         self._schedule()
 
     def _update_tab_widgets(self) -> None:
-        """Tabs only make sense for Esterno/Interno; the count is for automatic tabs, the marker list for shapes mode."""
+        """Tabs only make sense for Outside/Inside; the count is for automatic tabs, the marker list for shapes mode."""
         op = self.cur_op()
         applicable = op is not None and op.kind in ("inside", "outside")
         mode = op.tab_mode if (op is not None and applicable) else "none"
@@ -466,7 +466,7 @@ class ConverterPage(QWidget):
         self._schedule()
 
     def _add_op(self) -> None:
-        self.ops.append(cam.Operation(name=f"Operazione {len(self.ops) + 1}", kind="outside"))
+        self.ops.append(cam.Operation(name=f"Operation {len(self.ops) + 1}", kind="outside"))
         self._refresh_ops_list(len(self.ops) - 1)
         self._load_op_widgets()
         self._schedule()
@@ -475,7 +475,7 @@ class ConverterPage(QWidget):
         op = self.cur_op()
         if op:
             n = copy.deepcopy(op)
-            n.name += " (copia)"
+            n.name += " (copy)"
             self.ops.insert(self.ops_list.currentRow() + 1, n)
             self._refresh_ops_list(self.ops_list.currentRow() + 1)
             self._load_op_widgets()
@@ -533,7 +533,7 @@ class ConverterPage(QWidget):
         if not self.ops:
             self._show_result(cam.CamResult(guides=cam.design_guides(self.doc, self.job())), None)
             return
-        self.summary.setText("Calcolo del percorso…")
+        self.summary.setText("Computing the toolpath…")
         t = GenThread(self.doc, copy.deepcopy(self.ops), self.job(), os.path.basename(self.svg_path or ""),
                       self._serial, self)
         t.done.connect(self._on_generated)
@@ -551,8 +551,8 @@ class ConverterPage(QWidget):
         self._dirty = False
         self.editor.setPlainText(res.gcode)
         self.view.set_guides(res.guides)
-        self.view.empty_message = ("Aggiungi un'operazione (＋ Aggiungi) per generare il percorso utensile" if self.doc
-                                   else "Apri un file SVG")
+        self.view.empty_message = ("Add an operation (＋ Add) to generate the toolpath" if self.doc
+                                   else "Open an SVG file")
         self.view.set_program(prog, fit=self._fit_next)
         if prog is not None and len(prog.path):
             self._fit_next = False
@@ -561,14 +561,14 @@ class ConverterPage(QWidget):
         msgs = list(self.doc.warnings if self.doc else []) + res.warnings + (prog.warnings if prog else [])
         if prog is not None:
             sz = prog.size
-            info = (f"{res.n_paths} percorsi, {len(prog.commands)} righe, ingombro {sz[0]:.1f} × {sz[1]:.1f} × {sz[2]:.1f} mm, "
-                    f"tempo stimato ≈ {format_duration(prog.total_time)}")
-            self.summary.setText(info + (f"\n⚠ {len(msgs)} avvisi (scheda Messaggi)" if msgs else ""))
+            info = (f"{res.n_paths} paths, {len(prog.commands)} lines, size {sz[0]:.1f} × {sz[1]:.1f} × {sz[2]:.1f} mm, "
+                    f"estimated time ≈ {format_duration(prog.total_time)}")
+            self.summary.setText(info + (f"\n⚠ {len(msgs)} warnings (Messages tab)" if msgs else ""))
             msgs.insert(0, info)
         elif not self.ops and self.doc is not None:
-            self.summary.setText("Nessuna operazione: premi «＋ Aggiungi» per crearne una")
+            self.summary.setText("No operations: press «＋ Add» to create one")
         else:
-            self.summary.setText("Nessun G-code generato" + (" — vedi Messaggi" if msgs else ""))
+            self.summary.setText("No G-code generated" + (" — see Messages" if msgs else ""))
         self.messages.setPlainText("\n".join(msgs))
         self._update_buttons()
 
@@ -580,14 +580,14 @@ class ConverterPage(QWidget):
 
     # ------------------------------------------------------------------ output
     def suggested_name(self) -> str:
-        base = os.path.splitext(os.path.basename(self.svg_path or "disegno"))[0]
+        base = os.path.splitext(os.path.basename(self.svg_path or "design"))[0]
         return base + ".gcode"
 
     def save_gcode(self) -> None:
         if not (self.result and self.result.gcode) or self._dirty:
             return
         d = self.qs.value("conv/last_dir", os.path.expanduser("~"))
-        path, _ = QFileDialog.getSaveFileName(self, "Salva G-code", os.path.join(d, self.suggested_name()),
+        path, _ = QFileDialog.getSaveFileName(self, "Save G-code", os.path.join(d, self.suggested_name()),
                                               "G-code (*.gcode *.nc)")
         if path:
             with open(path, "w", encoding="utf-8") as f:

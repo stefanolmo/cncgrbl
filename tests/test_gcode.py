@@ -50,7 +50,7 @@ def test_time_estimate():
 def test_warnings():
     p = parse_program("G1X10\nG41X1\n" + "G1X1" + "Y1" * 50 + "F100\n")
     text = " ".join(p.warnings)
-    assert "senza avanzamento" in text and "G41" in text and "troppo lunga" in text
+    assert "no feed rate" in text and "G41" in text and "too long" in text
 
 
 def test_commands_mapping():

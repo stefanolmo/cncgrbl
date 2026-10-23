@@ -64,10 +64,10 @@ w.show()
 w.set_mode(1)
 c = w.converter
 c.ops = [
-    cam.Operation(name="Foro", kind="pocket", shapes={"foro"}, cut_depth=2, pass_depth=0.7),
-    cam.Operation(name="Stella", kind="pocket", shapes={"stella"}, cut_depth=1.0, pass_depth=0.5),
-    cam.Operation(name="Onda", kind="engrave", shapes={"onda"}, cut_depth=0.4, pass_depth=0.4),
-    cam.Operation(name="Taglio pezzo", kind="outside", shapes={"contorno"}, cut_depth=3, pass_depth=1.5,
+    cam.Operation(name="Hole", kind="pocket", shapes={"hole"}, cut_depth=2, pass_depth=0.7),
+    cam.Operation(name="Star", kind="pocket", shapes={"star"}, cut_depth=1.0, pass_depth=0.5),
+    cam.Operation(name="Wave", kind="engrave", shapes={"wave"}, cut_depth=0.4, pass_depth=0.4),
+    cam.Operation(name="Cut out part", kind="outside", shapes={"outline"}, cut_depth=3, pass_depth=1.5,
                   tab_mode="auto", tab_count=6, tab_width=5, tab_height=1.0),
 ]
 c._refresh_ops_list(3)

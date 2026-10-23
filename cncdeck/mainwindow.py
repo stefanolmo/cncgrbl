@@ -24,7 +24,7 @@ from .theme import icon
 from .viewer import ToolpathView
 from .widgets import (AxisRow, Card, CodeEditor, Console, JogPad, OverrideBox, RapidBox, StateBadge)
 
-STEPS = [("0.01 mm", 0.01), ("0.1 mm", 0.1), ("1 mm", 1.0), ("5 mm", 5.0), ("10 mm", 10.0), ("50 mm", 50.0), ("Continuo", None)]
+STEPS = [("0.01 mm", 0.01), ("0.1 mm", 0.1), ("1 mm", 1.0), ("5 mm", 5.0), ("10 mm", 10.0), ("50 mm", 50.0), ("Continuous", None)]
 BAUDS = [115200, 57600, 38400, 19200, 9600, 250000]
 APP_NAME = "CNC Deck"
 TITLE = f"CNC Deck {__version__}"
@@ -118,7 +118,7 @@ class MainWindow(QMainWindow):
         return a
 
     def _build_toolbar(self) -> None:
-        tb = QToolBar("Principale")
+        tb = QToolBar("Main")
         tb.setMovable(False)
         tb.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.addToolBar(tb)
@@ -128,11 +128,11 @@ class MainWindow(QMainWindow):
         sl.setContentsMargins(0, 0, 8, 0)
         sl.setSpacing(0)
         self.btn_mode = []
-        for i, text in enumerate(("Sender CNC", "Convertitore SVG")):
+        for i, text in enumerate(("CNC Sender", "SVG Converter")):
             b = QToolButton()
             b.setText(text)
             b.setCheckable(True)
-            b.setToolTip("Passa a " + text)
+            b.setToolTip("Switch to " + text)
             b.setStyleSheet("padding: 7px 16px; font-weight: 600; border-radius: 0;"
                             + ("border-top-left-radius:8px; border-bottom-left-radius:8px;" if i == 0 else
                                "border-top-right-radius:8px; border-bottom-right-radius:8px; border-left: none;"))
@@ -141,18 +141,18 @@ class MainWindow(QMainWindow):
             self.btn_mode.append(b)
         tb.addWidget(seg)
         self._sender_actions: list[QAction] = []
-        self.act_open = self._act("open", "Apri", "Apri file G-code", self.open_file, "Ctrl+O")
-        self.act_reload = self._act("reload", "Ricarica", "Ricarica il file da disco", self.reload_file, "Ctrl+Shift+R")
-        self.act_save = self._act("save", "Salva", "Salva le modifiche al file", self.save_file, "Ctrl+S")
-        self.act_run = self._act("play", "Avvia", "Avvia il programma", self.run_program, "Ctrl+R")
-        self.act_pause = self._act("pause", "Pausa", "Feed hold / riprendi", self.toggle_pause, "Ctrl+P")
-        self.act_stop = self._act("stop", "Stop", "Interrompi (hold + reset)", self.stop_program, "Ctrl+.")
-        self.act_home = self._act("home", "Home", "Ciclo di homing ($H)", lambda: self.send("$H"))
-        self.act_unlock = self._act("unlock", "Sblocca", "Sblocca allarme ($X)", lambda: self.send("$X"))
+        self.act_open = self._act("open", "Open", "Open a G-code file", self.open_file, "Ctrl+O")
+        self.act_reload = self._act("reload", "Reload", "Reload the file from disk", self.reload_file, "Ctrl+Shift+R")
+        self.act_save = self._act("save", "Save", "Save the changes to the file", self.save_file, "Ctrl+S")
+        self.act_run = self._act("play", "Run", "Run the program", self.run_program, "Ctrl+R")
+        self.act_pause = self._act("pause", "Pause", "Feed hold / resume", self.toggle_pause, "Ctrl+P")
+        self.act_stop = self._act("stop", "Stop", "Abort (hold + reset)", self.stop_program, "Ctrl+.")
+        self.act_home = self._act("home", "Home", "Homing cycle ($H)", lambda: self.send("$H"))
+        self.act_unlock = self._act("unlock", "Unlock", "Clear the alarm ($X)", lambda: self.send("$X"))
         self.act_reset = self._act("reset", "Reset", "Soft reset (Ctrl-X)", self.soft_reset)
-        self.act_check = self._act("check", "Check", "Modalità check: simula senza muovere ($C)", lambda: self.send("$C"), checkable=True)
-        self.act_probe = self._act("probe", "Tocca Z", "Azzera Z con piastrina di tocco (G38.2)", self.probe_z)
-        self.act_settings = self._act("gear", "GRBL", "Impostazioni della scheda ($$)", self.show_settings)
+        self.act_check = self._act("check", "Check", "Check mode: simulate without moving ($C)", lambda: self.send("$C"), checkable=True)
+        self.act_probe = self._act("probe", "Probe Z", "Zero Z with a touch plate (G38.2)", self.probe_z)
+        self.act_settings = self._act("gear", "GRBL", "Board settings ($$)", self.show_settings)
         for a in (self.act_open, self.act_reload, self.act_save):
             tb.addAction(a)
         self._sender_actions += [tb.addSeparator()]
@@ -185,7 +185,7 @@ class MainWindow(QMainWindow):
         lv.setContentsMargins(10, 10, 6, 10)
         lv.setSpacing(10)
 
-        c = Card("Connessione")
+        c = Card("Connection")
         row = QHBoxLayout()
         self.port_combo = QComboBox()
         self.port_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
@@ -198,7 +198,7 @@ class MainWindow(QMainWindow):
         row.addWidget(self.baud_combo)
         c.body.addLayout(row)
         row = QHBoxLayout()
-        self.btn_connect = QPushButton("Connetti")
+        self.btn_connect = QPushButton("Connect")
         self.btn_connect.setObjectName("primary")
         self.btn_connect.clicked.connect(self.toggle_connection)
         self.badge = StateBadge()
@@ -207,24 +207,24 @@ class MainWindow(QMainWindow):
         c.body.addLayout(row)
         lv.addWidget(c)
 
-        c = Card("Posizione")
+        c = Card("Position")
         self.axes = {a: AxisRow(a) for a in "XYZ"}
         for a, r in self.axes.items():
             r.zeroClicked.connect(lambda ax: self.send(f"G10L20P0{ax}0"))
             r.gotoClicked.connect(lambda ax: self.send(f"G90G0{ax}0"))
             c.body.addWidget(r)
         row = QHBoxLayout()
-        b = QPushButton("Azzera tutto")
+        b = QPushButton("Zero all")
         b.clicked.connect(lambda: self.send("G10L20P0X0Y0Z0"))
-        b2 = QPushButton("Vai a XY 0")
+        b2 = QPushButton("Go to XY 0")
         b2.clicked.connect(lambda: self.send("G90G0X0Y0"))
-        b3 = QPushButton("Z sicura")
-        b3.setToolTip("Porta Z alla quota di sicurezza (coordinate di lavoro)")
+        b3 = QPushButton("Safe Z")
+        b3.setToolTip("Move Z to the safe height (work coordinates)")
         b3.clicked.connect(self.goto_safe_z)
         for x in (b, b2, b3):
             row.addWidget(x)
         c.body.addLayout(row)
-        self.live = QLabel("Avanzamento 0   Mandrino 0")
+        self.live = QLabel("Feed 0   Spindle 0")
         self.live.setObjectName("muted")
         c.body.addWidget(self.live)
         lv.addWidget(c)
@@ -239,13 +239,13 @@ class MainWindow(QMainWindow):
         pad_row.addStretch()
         c.body.addLayout(pad_row)
         g = QHBoxLayout()
-        g.addWidget(QLabel("Passo"))
+        g.addWidget(QLabel("Step"))
         self.step_combo = QComboBox()
         for label, v in STEPS:
             self.step_combo.addItem(label, v)
         self.step_combo.setCurrentIndex(2)
         g.addWidget(self.step_combo, 1)
-        g.addWidget(QLabel("Vel."))
+        g.addWidget(QLabel("Speed"))
         self.jog_feed = QSpinBox()
         self.jog_feed.setRange(1, 20000)
         self.jog_feed.setValue(800)
@@ -254,13 +254,13 @@ class MainWindow(QMainWindow):
         g.addWidget(self.jog_feed, 1)
         c.body.addLayout(g)
         g = QHBoxLayout()
-        self.chk_keys = QCheckBox("Tastiera: frecce XY, Pag↑/↓ Z")
+        self.chk_keys = QCheckBox("Keyboard: arrows XY, PgUp/PgDn Z")
         g.addWidget(self.chk_keys)
         g.addStretch()
         c.body.addLayout(g)
         g = QHBoxLayout()
         g.addStretch()
-        g.addWidget(QLabel("Z sicura"))
+        g.addWidget(QLabel("Safe Z"))
         self.safe_z = QDoubleSpinBox()
         self.safe_z.setRange(0, 200)
         self.safe_z.setValue(5.0)
@@ -269,9 +269,9 @@ class MainWindow(QMainWindow):
         c.body.addLayout(g)
         lv.addWidget(c)
 
-        c = Card("Mandrino")
+        c = Card("Spindle")
         row = QHBoxLayout()
-        self.btn_spindle = QPushButton("  Acceso / Spento")
+        self.btn_spindle = QPushButton("  On / Off")
         self.btn_spindle.setIcon(icon("spindle"))
         self.btn_spindle.setCheckable(True)
         self.btn_spindle.clicked.connect(self.toggle_spindle)
@@ -292,35 +292,35 @@ class MainWindow(QMainWindow):
         c.body.addWidget(self.spindle_slider)
         lv.addWidget(c)
 
-        c = Card("Mappa altezze (livellamento)")
+        c = Card("Height map (leveling)")
         self.hm_step = self._spin(1, 100, 10.0, 1, " mm")
         self.hm_margin = self._spin(0, 50, 2.0, 1, " mm")
         self.hm_depth = self._spin(0.5, 20, 3.0, 1, " mm")
         self.hm_feed = self._spin(1, 300, 25.0, 0, " mm/min")
         self.hm_clear = self._spin(0.3, 5, 1.0, 1, " mm")
         self.hm_thick = self._spin(0, 50, 0.0, 2, " mm")
-        self.hm_step.setToolTip("Distanza tra i punti della griglia. Più fitta = più precisa e più lenta.")
-        self.hm_margin.setToolTip("Quanto allargare l'area oltre l'ingombro del lavoro.")
-        self.hm_depth.setToolTip("Massima discesa sotto lo zero: se non c'è contatto entro questa quota la tastatura si ferma.")
-        self.hm_feed.setToolTip("Velocità di discesa durante la tastatura (lenta = più precisa).")
-        self.hm_clear.setToolTip("Dopo il primo punto la fresa scende veloce fino a questa distanza sopra l'ultimo contatto.")
-        self.hm_thick.setToolTip("Spessore di un'eventuale piastrina sopra il pezzo (0 se la fresa tocca direttamente il materiale).")
+        self.hm_step.setToolTip("Distance between grid points. Finer = more accurate and slower.")
+        self.hm_margin.setToolTip("How much to enlarge the area beyond the extent of the job.")
+        self.hm_depth.setToolTip("Maximum descent below zero: if there is no contact within this depth, probing stops.")
+        self.hm_feed.setToolTip("Descent speed while probing (slower = more accurate).")
+        self.hm_clear.setToolTip("After the first point the tool descends quickly down to this distance above the last contact.")
+        self.hm_thick.setToolTip("Thickness of a touch plate on top of the workpiece (0 if the tool touches the material directly).")
         grid = QGridLayout()
         grid.setSpacing(6)
-        for r, (a, wa, b, wb) in enumerate((("Passo", self.hm_step, "Margine", self.hm_margin),
-                                            ("Prof. max", self.hm_depth, "Velocità", self.hm_feed),
-                                            ("Avvicin.", self.hm_clear, "Piastrina", self.hm_thick))):
+        for r, (a, wa, b, wb) in enumerate((("Step", self.hm_step, "Margin", self.hm_margin),
+                                            ("Max depth", self.hm_depth, "Speed", self.hm_feed),
+                                            ("Approach", self.hm_clear, "Plate", self.hm_thick))):
             for col, (lab, w) in enumerate(((a, wa), (b, wb))):
                 grid.addWidget(QLabel(lab), r, col * 2)
                 grid.addWidget(w, r, col * 2 + 1)
         c.body.addLayout(grid)
         row = QHBoxLayout()
-        self.btn_hm_probe = QPushButton("Tasta area del lavoro")
+        self.btn_hm_probe = QPushButton("Probe the job area")
         self.btn_hm_probe.setObjectName("primary")
         self.btn_hm_probe.setIcon(icon("probe"))
-        self.btn_hm_probe.setToolTip("Misura la superficie con la sonda su una griglia che copre l'ingombro del G-code")
+        self.btn_hm_probe.setToolTip("Measure the surface with the probe on a grid covering the extent of the G-code")
         self.btn_hm_probe.clicked.connect(self.start_heightmap)
-        self.btn_hm_cancel = QPushButton("Annulla")
+        self.btn_hm_cancel = QPushButton("Cancel")
         self.btn_hm_cancel.setObjectName("danger")
         self.btn_hm_cancel.clicked.connect(lambda: self.prober and self.prober.abort())
         self.btn_hm_cancel.hide()
@@ -331,27 +331,27 @@ class MainWindow(QMainWindow):
         self.hm_bar.setTextVisible(True)
         self.hm_bar.hide()
         c.body.addWidget(self.hm_bar)
-        self.hm_label = QLabel("Nessuna mappa")
+        self.hm_label = QLabel("No map")
         self.hm_label.setObjectName("muted")
         self.hm_label.setWordWrap(True)
         c.body.addWidget(self.hm_label)
-        self.chk_hm = QCheckBox("Applica la mappa quando avvio il programma")
+        self.chk_hm = QCheckBox("Apply the map when I run the program")
         self.chk_hm.setEnabled(False)
         self.chk_hm.toggled.connect(lambda _on: self._refresh_heightmap_ui())
         c.body.addWidget(self.chk_hm)
         row = QHBoxLayout()
-        self.btn_hm_save = QPushButton("Salva…")
+        self.btn_hm_save = QPushButton("Save…")
         self.btn_hm_save.clicked.connect(self.save_heightmap)
-        self.btn_hm_load = QPushButton("Carica…")
+        self.btn_hm_load = QPushButton("Load…")
         self.btn_hm_load.clicked.connect(self.load_heightmap)
-        self.btn_hm_clear = QPushButton("Elimina")
+        self.btn_hm_clear = QPushButton("Delete")
         self.btn_hm_clear.clicked.connect(self.clear_heightmap)
         for b in (self.btn_hm_save, self.btn_hm_load, self.btn_hm_clear):
             row.addWidget(b)
         c.body.addLayout(row)
         lv.addWidget(c)
 
-        c = Card("Macro  (tasto destro per modificare)")
+        c = Card("Macros  (right-click to edit)")
         self.macro_buttons: list[QPushButton] = []
         grid = QGridLayout()
         grid.setSpacing(6)
@@ -367,8 +367,8 @@ class MainWindow(QMainWindow):
         self._refresh_macros()
 
         c = Card("Override")
-        self.ov_feed = OverrideBox("Avanzam.")
-        self.ov_spin = OverrideBox("Mandrino")
+        self.ov_feed = OverrideBox("Feed")
+        self.ov_spin = OverrideBox("Spindle")
         self.ov_rapid = RapidBox()
         self.ov_feed.action.connect(self._ov_feed_action)
         self.ov_spin.action.connect(self._ov_spin_action)
@@ -401,7 +401,7 @@ class MainWindow(QMainWindow):
         ab.setContentsMargins(12, 8, 12, 8)
         self.alarm_label = QLabel()
         self.alarm_label.setWordWrap(True)
-        bu = QPushButton("Sblocca ($X)")
+        bu = QPushButton("Unlock ($X)")
         bu.clicked.connect(lambda: self.send("$X"))
         bh = QPushButton("Homing ($H)")
         bh.clicked.connect(lambda: self.send("$H"))
@@ -417,9 +417,9 @@ class MainWindow(QMainWindow):
         eb.setContentsMargins(12, 8, 12, 8)
         self.error_label = QLabel()
         self.error_label.setWordWrap(True)
-        self.btn_err_resume = QPushButton("Riprendi")
+        self.btn_err_resume = QPushButton("Resume")
         self.btn_err_resume.clicked.connect(self._error_resume)
-        self.btn_err_stop = QPushButton("Interrompi")
+        self.btn_err_stop = QPushButton("Abort")
         self.btn_err_stop.setObjectName("danger")
         self.btn_err_stop.clicked.connect(self.stop_program)
         eb.addWidget(self.error_label, 1)
@@ -445,11 +445,11 @@ class MainWindow(QMainWindow):
         prog_page = QWidget()
         pv = QVBoxLayout(prog_page)
         pv.setContentsMargins(8, 8, 8, 8)
-        self.job_label = QLabel("Nessun file caricato")
+        self.job_label = QLabel("No file loaded")
         self.job_label.setObjectName("muted")
         pv.addWidget(self.job_label)
         pv.addWidget(self.editor, 1)
-        tabs.addTab(prog_page, "Programma")
+        tabs.addTab(prog_page, "Program")
         tabs.addTab(self.console, "Console")
         self.tabs = tabs
         bv.addWidget(tabs)
@@ -472,14 +472,14 @@ class MainWindow(QMainWindow):
             self._update_enabled()
 
     def _send_from_converter(self, text: str, name: str) -> None:
-        """'Invia alla CNC': hand the generated G-code to the Sender in memory (no file round-trip)."""
+        """'Send to CNC': hand the generated G-code to the Sender in memory (no file round-trip)."""
         if self.load_gcode_text(text, name):
             self.set_mode(0)
-            self.sb_state.setText("G-code dalla conversione caricato nel Sender: controlla lo zero pezzo, poi premi Avvia")
+            self.sb_state.setText("G-code from the converter loaded into the Sender: check the work zero, then press Run")
 
     def load_gcode_text(self, text: str, name: str) -> bool:
         if self._running:
-            QMessageBox.information(self, APP_NAME, "Non puoi caricare un programma durante l'esecuzione.")
+            QMessageBox.information(self, APP_NAME, "You cannot load a program while one is running.")
             return False
         self.file_path = None
         self._display_name = name
@@ -510,19 +510,19 @@ class MainWindow(QMainWindow):
             lay.addWidget(b)
             return b
 
-        mk("3D", "Vista isometrica", lambda: self.view.set_view("iso"))
-        mk("Alto", "Vista dall'alto", lambda: self.view.set_view("top"))
-        mk("Fronte", "Vista frontale", lambda: self.view.set_view("front"))
-        mk("Lato", "Vista laterale", lambda: self.view.set_view("right"))
-        mk("Adatta", "Inquadra tutto (doppio clic)", self.view.fit)
-        mk("Rapidi", "Mostra i movimenti rapidi", self._toggle_rapids, True, True)
-        mk("Area macchina", "Mostra i limiti di corsa della macchina ($130-132)", self._toggle_envelope, True, False)
+        mk("3D", "Isometric view", lambda: self.view.set_view("iso"))
+        mk("Top", "Top view", lambda: self.view.set_view("top"))
+        mk("Front", "Front view", lambda: self.view.set_view("front"))
+        mk("Side", "Side view", lambda: self.view.set_view("right"))
+        mk("Fit", "Fit everything (double-click)", self.view.fit)
+        mk("Rapids", "Show rapid moves", self._toggle_rapids, True, True)
+        mk("Machine area", "Show the machine travel limits ($130-132)", self._toggle_envelope, True, False)
         bar.move(10, 10)
         bar.adjustSize()
 
     def _build_statusbar(self) -> None:
         sb = self.statusBar()
-        self.sb_state = QLabel("Non connesso")
+        self.sb_state = QLabel("Not connected")
         self.sb_buf = QLabel("")
         self.sb_buf.setObjectName("muted")
         self.sb_time = QLabel("")
@@ -561,7 +561,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, e) -> None:
         if self._running:
-            if QMessageBox.question(self, APP_NAME, "Un programma è in esecuzione. Chiudere comunque?") != QMessageBox.Yes:
+            if QMessageBox.question(self, APP_NAME, "A program is running. Close anyway?") != QMessageBox.Yes:
                 e.ignore()
                 return
         QApplication.instance().removeEventFilter(self)
@@ -586,10 +586,10 @@ class MainWindow(QMainWindow):
     def _list_ports(self):
         items = []
         for p in list_ports.comports():
-            desc = p.description if p.description and p.description != "n/a" else "Porta seriale"
+            desc = p.description if p.description and p.description != "n/a" else "Serial port"
             items.append((p.device, f"{p.device}  —  {desc}"))
         items.sort(key=lambda t: (0 if ("ttyUSB" in t[0] or "ttyACM" in t[0]) else 1, t[0]))
-        items.append((SIM_PORT, "Simulatore GRBL (demo)"))
+        items.append((SIM_PORT, "GRBL simulator (demo)"))
         return items
 
     def _refresh_ports(self) -> None:
@@ -638,7 +638,7 @@ class MainWindow(QMainWindow):
         self.prober.failed.connect(self._on_hm_failed)
         self.status = Status(state="Connecting")
         self.badge.set_state("Connecting")
-        self.btn_connect.setText("Connessione…")
+        self.btn_connect.setText("Connecting…")
         self.btn_connect.setEnabled(False)
         self.port_combo.setEnabled(False)
         self.baud_combo.setEnabled(False)
@@ -648,23 +648,23 @@ class MainWindow(QMainWindow):
         self.sb_state.setText(msg)
         self.btn_connect.setEnabled(True)
         if ok:
-            self.btn_connect.setText("Disconnetti")
+            self.btn_connect.setText("Disconnect")
             self.console.append(msg, "info")
         else:
-            self.btn_connect.setText("Connetti")
+            self.btn_connect.setText("Connect")
             self.port_combo.setEnabled(True)
             self.baud_combo.setEnabled(True)
             self.status = Status()
             self.badge.set_state("Disconnected")
             self.alarm_bar.hide()
-            self.console.append(msg, "error" if "mpossibile" in msg or "persa" in msg or "Nessuna" in msg else "info")
+            self.console.append(msg, "error" if "Cannot open" in msg or "lost" in msg or "No response" in msg else "info")
             if "Errno 13" in msg or "ermission" in msg:
                 QMessageBox.warning(self, APP_NAME,
-                                    f"{msg}\n\nSu Ubuntu aggiungi il tuo utente al gruppo 'dialout':\n"
-                                    "  sudo usermod -aG dialout $USER\n(poi esci e rientra dalla sessione).\n\n"
-                                    "Se la scheda con chip CH340 sparisce subito dopo averla collegata, "
-                                    "rimuovi brltty:  sudo apt remove brltty")
-            elif "mpossibile" in msg or "Nessuna" in msg:
+                                    f"{msg}\n\nOn Ubuntu add your user to the 'dialout' group:\n"
+                                    "  sudo usermod -aG dialout $USER\n(then log out and back in).\n\n"
+                                    "If a board with a CH340 chip disappears right after plugging it in, "
+                                    "remove brltty:  sudo apt remove brltty")
+            elif "Cannot open" in msg or "No response" in msg:
                 QMessageBox.warning(self, APP_NAME, msg)
             self._finish_run_ui()
         self._update_enabled()
@@ -677,15 +677,15 @@ class MainWindow(QMainWindow):
         self.view.set_tool(st.wpos)
         self.badge.set_state(st.state)
         self.act_check.setChecked(st.base_state == "Check")
-        self.live.setText(f"Avanzamento {st.feed:.0f} mm/min    Mandrino {st.spindle:.0f}")
+        self.live.setText(f"Feed {st.feed:.0f} mm/min    Spindle {st.spindle:.0f}")
         self.ov_feed.set_value(st.ov_feed)
         self.ov_rapid.set_value(st.ov_rapid)
         self.ov_spin.set_value(st.ov_spindle)
-        port = "Simulatore" if self.port_combo.currentData() == SIM_PORT else self.port_combo.currentData()
+        port = "Simulator" if self.port_combo.currentData() == SIM_PORT else self.port_combo.currentData()
         self.sb_state.setText(f"{port}  •  {st.state}" + (f"  •  Pin: {st.pins}" if st.pins else ""))
         self.sb_buf.setText(f"Buffer: planner {st.planner_free}  rx {st.rx_free}" if st.planner_free else "")
         if st.base_state == "Alarm":
-            self.alarm_label.setText(self._alarm_text or "Macchina in ALLARME. Verifica la posizione, poi sblocca ($X) o esegui l'homing.")
+            self.alarm_label.setText(self._alarm_text or "Machine in ALARM. Check the position, then unlock ($X) or run homing.")
             self.alarm_bar.show()
         else:
             self.alarm_bar.hide()
@@ -699,7 +699,7 @@ class MainWindow(QMainWindow):
         self._update_enabled()
 
     def on_alarm(self, code: int, msg: str) -> None:
-        self._alarm_text = f"ALLARME {code}: {msg}"
+        self._alarm_text = f"ALARM {code}: {msg}"
         self.alarm_label.setText(self._alarm_text)
         self.alarm_bar.show()
 
@@ -728,7 +728,7 @@ class MainWindow(QMainWindow):
     def _write_settings(self, cmds: list) -> None:
         if self._running:
             return
-        if QMessageBox.question(self, "Scrivi impostazioni", "Scrivere nella EEPROM:\n\n" + "\n".join(cmds)) != QMessageBox.Yes:
+        if QMessageBox.question(self, "Write settings", "Write to the EEPROM:\n\n" + "\n".join(cmds)) != QMessageBox.Yes:
             return
         for c in cmds:
             self.send(c)
@@ -770,7 +770,7 @@ class MainWindow(QMainWindow):
         self.act_pause.setEnabled(conn and (self._running or st in ("Run", "Hold")))
         self.act_stop.setEnabled(conn and (self._running or st in ("Run", "Hold", "Jog")))
         self.act_pause.setIcon(icon("play" if self._paused or st == "Hold" else "pause"))
-        self.act_pause.setText("Riprendi" if self._paused or st == "Hold" else "Pausa")
+        self.act_pause.setText("Resume" if self._paused or st == "Hold" else "Pause")
         self.act_home.setEnabled(bool(conn and st in ("Idle", "Alarm")))
         self.act_unlock.setEnabled(conn and st == "Alarm")
         self.act_reset.setEnabled(conn)
@@ -789,7 +789,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------ sending
     def send(self, text: str) -> None:
         if not self.connected:
-            self.console.append("Non connesso", "error")
+            self.console.append("Not connected", "error")
             return
         self.conn.send_line(text)
 
@@ -801,7 +801,7 @@ class MainWindow(QMainWindow):
         for i, b in enumerate(self.macro_buttons):
             name, cmd = self._macro(i)
             b.setText(name or "＋")
-            b.setToolTip(cmd.replace(";", "\n") if cmd else "Clic destro per definire una macro")
+            b.setToolTip(cmd.replace(";", "\n") if cmd else "Right-click to define a macro")
 
     def run_macro(self, n: int) -> None:
         name, cmd = self._macro(n)
@@ -816,14 +816,14 @@ class MainWindow(QMainWindow):
 
     def edit_macro(self, n: int) -> None:
         name, cmd = self._macro(n)
-        new_name, ok = QInputDialog.getText(self, "Macro", "Nome del pulsante (vuoto per cancellare):", text=name)
+        new_name, ok = QInputDialog.getText(self, "Macro", "Button name (empty to delete):", text=name)
         if not ok:
             return
         if not new_name.strip():
             self.qs.setValue(f"macro{n}_name", "")
             self.qs.setValue(f"macro{n}_cmd", "")
         else:
-            new_cmd, ok = QInputDialog.getMultiLineText(self, "Macro", "Comandi (uno per riga):", cmd.replace(";", "\n"))
+            new_cmd, ok = QInputDialog.getMultiLineText(self, "Macro", "Commands (one per line):", cmd.replace(";", "\n"))
             if not ok:
                 return
             self.qs.setValue(f"macro{n}_name", new_name.strip())
@@ -917,13 +917,13 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ probing
     def probe_z(self) -> None:
-        v, ok = QInputDialog.getDouble(self, "Tocca Z", "Spessore della piastrina (mm):", self._probe_thickness, 0, 100, 2)
+        v, ok = QInputDialog.getDouble(self, "Probe Z", "Touch plate thickness (mm):", self._probe_thickness, 0, 100, 2)
         if not ok:
             return
         self._probe_thickness = v
         self.qs.setValue("probe_thickness", v)
-        if QMessageBox.question(self, "Tocca Z", "Collega la pinza del probe alla fresa, appoggia la piastrina sotto la punta "
-                                "e verifica che il contatto funzioni (console: Pn:P). Procedere con la discesa lenta?") != QMessageBox.Yes:
+        if QMessageBox.question(self, "Probe Z", "Connect the probe clip to the tool, put the plate under the tip "
+                                "and check that the contact works (console: Pn:P). Start the slow descent?") != QMessageBox.Yes:
             return
         self._probe_pending = True
         self.send("G91G38.2Z-30F25")
@@ -937,9 +937,9 @@ class MainWindow(QMainWindow):
             self.send(f"G10L20P0Z{self._probe_thickness:g}")
             self.send(f"G91G0Z{max(5.0, self.safe_z.value()):g}")
             self.send("G90")
-            self.console.append(f"Z azzerata sulla piastrina (spessore {self._probe_thickness:g} mm)", "info")
+            self.console.append(f"Z zeroed on the plate (thickness {self._probe_thickness:g} mm)", "info")
         else:
-            self.console.append("Probe fallito: nessun contatto", "error")
+            self.console.append("Probe failed: no contact", "error")
 
     # ------------------------------------------------------------------ height map (auto-leveling)
     def _hm_params(self) -> ProbeParams | None:
@@ -957,35 +957,35 @@ class MainWindow(QMainWindow):
             return
         err = p.validate()
         if err:
-            QMessageBox.warning(self, "Mappa altezze", err)
+            QMessageBox.warning(self, "Height map", err)
             return
         from .heightmap import grid_axes
         nx, ny = len(grid_axes(p.area[0], p.area[2], p.step)), len(grid_axes(p.area[1], p.area[3], p.step))
         secs = (p.safe_z + p.depth) / p.feed * 60 + (nx * ny - 1) * ((p.clearance + 0.5) / p.feed * 60 + 3.0)
         x0, y0, x1, y1 = p.area
         if QMessageBox.question(
-                self, "Mappa altezze",
-                f"Verranno tastati {nx * ny} punti ({nx} × {ny}) sull'area X {x0:.1f}…{x1:.1f}, Y {y0:.1f}…{y1:.1f} mm "
+                self, "Height map",
+                f"{nx * ny} points ({nx} × {ny}) will be probed over the area X {x0:.1f}…{x1:.1f}, Y {y0:.1f}…{y1:.1f} mm "
                 f"(≈ {format_duration(secs)}).\n\n"
-                "Prima di procedere:\n"
-                "• mandrino SPENTO;\n"
-                "• pinza della sonda collegata alla fresa e al materiale (o piastrina sul pezzo);\n"
-                "• Z0 azzerato sulla superficie nell'origine del lavoro e fresa sollevata sopra il pezzo;\n"
-                f"• la prima discesa parte da Z {p.safe_z:g} e può arrivare fino a Z -{p.depth:g}.\n\n"
-                "La mappa vale solo finché il pezzo non viene spostato. Continuare?") != QMessageBox.Yes:
+                "Before you continue:\n"
+                "• spindle OFF;\n"
+                "• probe clip connected to the tool and to the material (or a plate on the workpiece);\n"
+                "• Z0 zeroed on the surface at the job origin and the tool raised above the workpiece;\n"
+                f"• the first descent starts at Z {p.safe_z:g} and can go down to Z -{p.depth:g}.\n\n"
+                "The map is only valid while the workpiece is not moved. Continue?") != QMessageBox.Yes:
             return
         self._probing = True
         err = self.prober.start(p)
         if err:
             self._probing = False
-            QMessageBox.warning(self, "Mappa altezze", err)
+            QMessageBox.warning(self, "Height map", err)
         else:
             self.hm_bar.setRange(0, nx * ny)
             self.hm_bar.setValue(0)
-            self.hm_bar.setFormat("%v / %m punti")
+            self.hm_bar.setFormat("%v / %m points")
             self.hm_bar.show()
             self.tabs.setCurrentIndex(1)
-            self.console.append(f"Tastatura di {nx * ny} punti…", "info")
+            self.console.append(f"Probing {nx * ny} points…", "info")
         self._update_enabled()
 
     def _on_hm_progress(self, done: int, total: int) -> None:
@@ -997,7 +997,7 @@ class MainWindow(QMainWindow):
         self.hm_bar.hide()
         self.heightmap = hm
         self.chk_hm.setChecked(True)
-        self.console.append(f"Mappa altezze completata: {hm.shape[1]}×{hm.shape[0]} punti, dislivello {hm.spread:.3f} mm", "info")
+        self.console.append(f"Height map complete: {hm.shape[1]}×{hm.shape[0]} points, height difference {hm.spread:.3f} mm", "info")
         self._refresh_heightmap_ui()
         self._update_enabled()
 
@@ -1005,50 +1005,50 @@ class MainWindow(QMainWindow):
         self._probing = False
         self.hm_bar.hide()
         self.console.append(msg, "error")
-        self.sb_state.setText("Tastatura interrotta")
+        self.sb_state.setText("Probing aborted")
         self._update_enabled()
-        QTimer.singleShot(0, lambda: QMessageBox.warning(self, "Mappa altezze", msg))
+        QTimer.singleShot(0, lambda: QMessageBox.warning(self, "Height map", msg))
 
     def _refresh_heightmap_ui(self) -> None:
         hm = self.heightmap
         if hm is None:
-            self.hm_label.setText("Nessuna mappa")
+            self.hm_label.setText("No map")
             self.view.set_heightmap(None)
             return
         x0, y0, x1, y1 = hm.area
         on = self.chk_hm.isChecked()
-        self.hm_label.setText(f"Mappa {hm.shape[1]}×{hm.shape[0]} punti • dislivello {hm.spread:.3f} mm • {hm.created}<br>"
-                              f"Area (macchina) X {x0:.1f}…{x1:.1f}, Y {y0:.1f}…{y1:.1f} • "
-                              + ("<b>attiva</b>" if on else "disattivata"))
+        self.hm_label.setText(f"Map {hm.shape[1]}×{hm.shape[0]} points • height difference {hm.spread:.3f} mm • {hm.created}<br>"
+                              f"Area (machine) X {x0:.1f}…{x1:.1f}, Y {y0:.1f}…{y1:.1f} • "
+                              + ("<b>active</b>" if on else "inactive"))
         self.view.set_heightmap(hm.shifted(self.status.wco))
         self._hm_wco = tuple(self.status.wco)
 
     def save_heightmap(self) -> None:
         if not self.heightmap:
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Salva mappa altezze", "mappa-altezze.json", "Mappa altezze (*.json)")
+        path, _ = QFileDialog.getSaveFileName(self, "Save height map", "height-map.json", "Height map (*.json)")
         if path:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(self.heightmap.to_json())
-            self.console.append(f"Mappa salvata in {path}", "info")
+            self.console.append(f"Map saved to {path}", "info")
 
     def load_heightmap(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Carica mappa altezze", "", "Mappa altezze (*.json)")
+        path, _ = QFileDialog.getOpenFileName(self, "Load height map", "", "Height map (*.json)")
         if not path:
             return
         try:
             with open(path, encoding="utf-8") as f:
                 hm = HeightMap.from_json(f.read())
         except (OSError, HeightMapError) as e:
-            QMessageBox.warning(self, "Mappa altezze", str(e))
+            QMessageBox.warning(self, "Height map", str(e))
             return
         if not hm.complete:
-            QMessageBox.warning(self, "Mappa altezze", "La mappa è incompleta (tastatura interrotta): non può essere usata.")
+            QMessageBox.warning(self, "Height map", "The map is incomplete (probing aborted): it cannot be used.")
             return
         self.heightmap = hm
         self.chk_hm.setChecked(False)
-        QMessageBox.information(self, "Mappa altezze", "Mappa caricata ma NON attiva. È valida solo se il pezzo è fermo "
-                                "nella stessa posizione in cui è stata misurata: verifica, poi spunta «Applica la mappa».")
+        QMessageBox.information(self, "Height map", "Map loaded but NOT active. It is only valid if the workpiece sits "
+                                "in the same position where it was measured: check, then tick «Apply the map».")
         self._refresh_heightmap_ui()
         self._update_enabled()
 
@@ -1066,17 +1066,17 @@ class MainWindow(QMainWindow):
         if self.program and len(self.program.path) and not work.covers(self.program.bounds_min[:2], self.program.bounds_max[:2]):
             x0, y0, x1, y1 = work.area
             if QMessageBox.warning(
-                    self, "Mappa altezze",
-                    "Il lavoro esce dall'area mappata (X %.1f…%.1f, Y %.1f…%.1f in coordinate pezzo): fuori dall'area si usa "
-                    "l'altezza del bordo, quindi la profondità non è compensata. Avviare comunque?" % (x0, x1, y0, y1),
+                    self, "Height map",
+                    "The job extends beyond the mapped area (X %.1f…%.1f, Y %.1f…%.1f in work coordinates): outside it the "
+                    "edge height is used, so the depth is not compensated. Run anyway?" % (x0, x1, y0, y1),
                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
                 return None
         try:
             out = correct_program(cmds, work, start=self.status.wpos)
         except HeightMapError as e:
-            QMessageBox.warning(self, "Mappa altezze", str(e))
+            QMessageBox.warning(self, "Height map", str(e))
             return None
-        self.console.append(f"Mappa altezze applicata: {len(cmds)} → {len(out)} comandi", "info")
+        self.console.append(f"Height map applied: {len(cmds)} → {len(out)} commands", "info")
         return out
 
     # ------------------------------------------------------------------ files
@@ -1092,8 +1092,8 @@ class MainWindow(QMainWindow):
 
     def open_file(self) -> None:
         d = self.qs.value("last_dir", os.path.expanduser("~"))
-        path, _ = QFileDialog.getOpenFileName(self, "Apri G-code", d,
-                                              "G-code (*.nc *.gcode *.ngc *.tap *.gc *.cnc *.txt);;Tutti i file (*)")
+        path, _ = QFileDialog.getOpenFileName(self, "Open G-code", d,
+                                              "G-code (*.nc *.gcode *.ngc *.tap *.gc *.cnc *.txt);;All files (*)")
         if path:
             self.load_file(path)
 
@@ -1103,7 +1103,7 @@ class MainWindow(QMainWindow):
 
     def load_file(self, path: str) -> None:
         if self._running:
-            QMessageBox.information(self, APP_NAME, "Non puoi caricare un file durante l'esecuzione.")
+            QMessageBox.information(self, APP_NAME, "You cannot load a file while one is running.")
             return
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as f:
@@ -1124,14 +1124,14 @@ class MainWindow(QMainWindow):
     def save_file(self) -> None:
         path = self.file_path
         if not path or not os.access(os.path.dirname(path) or ".", os.W_OK):
-            path, _ = QFileDialog.getSaveFileName(self, "Salva G-code", self.qs.value("last_dir", os.path.expanduser("~")), "G-code (*.nc *.gcode)")
+            path, _ = QFileDialog.getSaveFileName(self, "Save G-code", self.qs.value("last_dir", os.path.expanduser("~")), "G-code (*.nc *.gcode)")
         if not path:
             return
         with open(path, "w", encoding="utf-8") as f:
             f.write(self.editor.toPlainText())
         self.file_path = path
         self.setWindowTitle(f"{os.path.basename(path)} — {TITLE}")
-        self.sb_state.setText(f"Salvato {path}")
+        self.sb_state.setText(f"Saved {path}")
 
     def _rates(self):
         s = self.conn.settings if self.conn else {}
@@ -1139,7 +1139,7 @@ class MainWindow(QMainWindow):
 
     def _parse(self, text: str) -> None:
         self._parse_serial += 1
-        self.job_label.setText("Analisi del file in corso…")
+        self.job_label.setText("Analysing the file…")
         t = ParseThread(text, self._rates(), self._parse_serial, self)
         t.parsed.connect(self._on_parsed)
         t.finished.connect(t.deleteLater)
@@ -1153,16 +1153,16 @@ class MainWindow(QMainWindow):
         self.view.set_program(prog)
         self._acked_idx = -1
         self.editor.set_exec_line(-1)
-        self.editor.errors = {int(w.split(":")[0].split()[1]) - 1 for w in prog.warnings if w.startswith("Riga ")}
+        self.editor.errors = {int(w.split(":")[0].split()[1]) - 1 for w in prog.warnings if w.startswith("Line ")}
         self.editor.gutter.update()
         sz = prog.size
         n_cmd = len(prog.commands)
-        name = self._display_name or "(senza nome)"
+        name = self._display_name or "(unnamed)"
         self.job_label.setText(
-            f"<b>{name}</b> &nbsp;•&nbsp; {n_cmd} comandi &nbsp;•&nbsp; ingombro "
-            f"{sz[0]:.1f} × {sz[1]:.1f} × {sz[2]:.1f} mm &nbsp;•&nbsp; lavoro {prog.feed_length:.0f} mm "
-            f"&nbsp;•&nbsp; tempo stimato ≈ {format_duration(prog.total_time)}"
-            + (f" &nbsp;•&nbsp; <span style='color:{theme.WARN}'>{len(prog.warnings)} avvisi</span>" if prog.warnings else ""))
+            f"<b>{name}</b> &nbsp;•&nbsp; {n_cmd} commands &nbsp;•&nbsp; size "
+            f"{sz[0]:.1f} × {sz[1]:.1f} × {sz[2]:.1f} mm &nbsp;•&nbsp; cutting {prog.feed_length:.0f} mm "
+            f"&nbsp;•&nbsp; estimated time ≈ {format_duration(prog.total_time)}"
+            + (f" &nbsp;•&nbsp; <span style='color:{theme.WARN}'>{len(prog.warnings)} warnings</span>" if prog.warnings else ""))
         self.sb_time.setText(f"≈ {format_duration(prog.total_time)}")
         self.progress.setValue(0)
         for w in prog.warnings[:30]:
@@ -1178,7 +1178,7 @@ class MainWindow(QMainWindow):
             sz = self.program.size
             over = [a for a, v, k in zip("XYZ", sz, (130, 131, 132)) if v > s[k] + 1e-6]
             if over:
-                self.console.append(f"Attenzione: il programma è più grande della corsa della macchina su {', '.join(over)}", "msg")
+                self.console.append(f"Warning: the program is larger than the machine travel on {', '.join(over)}", "msg")
 
     def _editor_changed(self) -> None:
         if not self._loading_text and not self._running:
@@ -1193,8 +1193,8 @@ class MainWindow(QMainWindow):
         if self.program and self.program.warnings:
             txt = "\n".join(self.program.warnings[:12])
             if len(self.program.warnings) > 12:
-                txt += f"\n… e altri {len(self.program.warnings) - 12}"
-            if QMessageBox.warning(self, "Avvisi nel programma", f"{txt}\n\nAvviare comunque?",
+                txt += f"\n… and {len(self.program.warnings) - 12} more"
+            if QMessageBox.warning(self, "Program warnings", f"{txt}\n\nRun anyway?",
                                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
                 return False
         return True
@@ -1210,9 +1210,9 @@ class MainWindow(QMainWindow):
         if not (self.program and self.connected) or self._running or self.status.base_state != "Idle":
             return
         if QMessageBox.question(
-                self, "Riprendi da riga",
-                f"Ripartire dalla riga {line + 1}?\n\nVerrà ripristinato lo stato (unità, avanzamento, mandrino), poi la fresa "
-                "salirà sopra il pezzo, andrà in XY e scenderà alla quota della riga. Verifica che lo zero pezzo sia quello originale.") != QMessageBox.Yes:
+                self, "Resume from line",
+                f"Restart from line {line + 1}?\n\nThe state (units, feed rate, spindle) will be restored, then the tool "
+                "will rise above the workpiece, move to XY and descend to the height of that line. Check that the work zero is the original one.") != QMessageBox.Yes:
             return
         pre = [(line, c) for c in preamble_for(self.program, line)]
         rest = [(i, c) for i, c in self.program.commands if i >= line]
@@ -1276,15 +1276,15 @@ class MainWindow(QMainWindow):
             # non-modal: a blocking dialog per rejected line stacks up and freezes the main window
             self._paused = True
             self._paused_at = time.monotonic()
-            self.error_label.setText(self._last_error or "GRBL ha rifiutato una riga. Il programma è in pausa.")
+            self.error_label.setText(self._last_error or "GRBL rejected a line. The program is paused.")
             self.error_bar.show()
         elif s == "done":
             el = time.monotonic() - self._t0 - self._paused_total
-            self.console.append(f"Programma completato in {format_duration(el)}", "info")
-            self.sb_state.setText(f"Programma completato in {format_duration(el)}")
+            self.console.append(f"Program completed in {format_duration(el)}", "info")
+            self.sb_state.setText(f"Program completed in {format_duration(el)}")
             self._finish_run_ui(done=True)
         elif s == "aborted":
-            self.console.append("Programma interrotto", "info")
+            self.console.append("Program aborted", "info")
             self._finish_run_ui()
         self._update_enabled()
 
@@ -1302,9 +1302,9 @@ class MainWindow(QMainWindow):
             src, cmd = self._run_cmds[idx]
             self._error_count += 1
             if self._error_count == 1:      # keep the first rejected line: it is the cause
-                self._first_error = (f"GRBL ha rifiutato la riga {src + 1}: {cmd}  →  error:{code} "
-                                     f"{grbl.ERRORS.get(code, '')}. Programma in pausa.")
-            self._last_error = self._first_error + (f"  (+{self._error_count - 1} altre righe rifiutate, vedi Console)"
+                self._first_error = (f"GRBL rejected line {src + 1}: {cmd}  →  error:{code} "
+                                     f"{grbl.ERRORS.get(code, '')}. Program paused.")
+            self._last_error = self._first_error + (f"  (+{self._error_count - 1} more lines rejected, see Console)"
                                                     if self._error_count > 1 else "")
             if self.error_bar.isVisible():
                 self.error_label.setText(self._last_error)
@@ -1347,4 +1347,4 @@ class MainWindow(QMainWindow):
         rem = 0.0
         if self.program:
             rem = self.program.time_remaining(src) * 100.0 / max(self.status.ov_feed, 10)
-        self.sb_time.setText(f"{format_duration(el)}  /  restano ≈ {format_duration(rem)}")
+        self.sb_time.setText(f"{format_duration(el)}  /  remaining ≈ {format_duration(rem)}")

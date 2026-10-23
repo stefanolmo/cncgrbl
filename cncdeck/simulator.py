@@ -335,7 +335,7 @@ class SimulatedSerial:
             self._emit(f"[GC:G0 G{self._cs} G17 G{'20' if self._inch else '21'} G{'90' if self._abs else '91'} "
                        f"G94 M0 {self._spindle} M9 T0 F{self._feed:g} S{self._s:g}]\r\nok\r\n")
         elif line == "$I":
-            self._emit("[VER:1.1h.20190825:Simulatore]\r\n[OPT:V,15,128]\r\nok\r\n")
+            self._emit("[VER:1.1h.20190825:Simulator]\r\n[OPT:V,15,128]\r\nok\r\n")
         elif line == "$#":
             self._emit("ok\r\n")
         elif line == "$X":

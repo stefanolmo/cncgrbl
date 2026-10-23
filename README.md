@@ -1,132 +1,130 @@
 # CNC Deck
 
-<p align="center"><img src="docs/splash.png" alt="CNC Deck - schermata iniziale" width="640"></p>
+<p align="center"><img src="docs/splash.png" alt="CNC Deck - splash screen" width="640"></p>
 
-Sender G-code per CNC **GRBL 1.1** (pensato per la CNC 1610 Pro) con interfaccia scura e viewer 3D, più un convertitore **SVG → G-code**.
-Python 3 + Qt6 (PySide6) + pyserial. Testato su Ubuntu 26.04 LTS.
+G-code sender for **GRBL 1.1** CNCs (designed for the CNC 1610 Pro) with a dark interface and a 3D viewer, plus an **SVG → G-code** converter.
+Python 3 + Qt6 (PySide6) + pyserial. Tested on Ubuntu 26.04 LTS.
 
-## Com'è fatto
+## What it is
 
-Un'unica finestra con due modalità, selezionabili dall'interruttore in alto a sinistra.
+A single window with two modes, selected with the switch at the top left.
 
-**Sender CNC** – carica un `.gcode`, controlla la macchina (DRO, jog, probe Z, override, mandrino) e invia il programma con anteprima 3D in tempo reale. Qui il lavoro di esempio è in esecuzione sul simulatore GRBL integrato.
+**CNC Sender** – load a `.gcode`, control the machine (DRO, jog, Z probe, overrides, spindle) and stream the program with a live 3D preview. Here the sample job is running on the built-in GRBL simulator.
 
-<p align="center"><img src="docs/sender.png" alt="CNC Deck - modalità Sender CNC" width="900"></p>
+<p align="center"><img src="docs/sender.png" alt="CNC Deck - CNC Sender mode" width="900"></p>
 
-**Convertitore SVG** – carica un `.svg`, crea una o più operazioni (esterno, interno, tasca, incisione, con linguette di fissaggio), guarda il percorso utensile in anteprima 3D e poi salva il `.gcode` o premi **Invia alla CNC** per caricarlo direttamente nel Sender.
+**SVG Converter** – load an `.svg`, create one or more operations (outside, inside, pocket, engrave, with holding tabs), preview the toolpath in 3D, then save the `.gcode` or press **Send to CNC** to load it straight into the Sender.
 
-<p align="center"><img src="docs/converter.png" alt="CNC Deck - modalità Convertitore SVG" width="900"></p>
+<p align="center"><img src="docs/converter.png" alt="CNC Deck - SVG Converter mode" width="900"></p>
 
-## Installazione (Ubuntu)
-
-```bash
-./install.sh          # venv in ~/.local/share/cncdeck, launcher "cncdeck", voce nel menu
-cncdeck               # oppure: cncdeck examples/demo.nc
-cncdeck --sim         # prova tutto senza macchina (simulatore GRBL interno)
-cncdeck --no-splash   # senza la schermata iniziale di 3 secondi (o CNCDECK_NO_SPLASH=1)
-```
-
-Senza installare: `pip install -r requirements.txt && python3 -m cncdeck`.
-
-## Installazione come pacchetto .deb (Ubuntu/Debian)
-
-Pacchetto "da distribuzione": contiene solo CNC Deck e usa le librerie Python di sistema (`python3-pyside6.*`, `python3-numpy`,
-`python3-serial`, `python3-pyclipper`); incorpora soltanto `svgelements`. Si installa e si disinstalla con apt o Synaptic:
+## Installation (Ubuntu)
 
 ```bash
-sudo apt install ./packaging/deb/cncdeck_0.6.0_all.deb     # installa anche le dipendenze di sistema
-sudo apt remove cncdeck                                    # disinstalla (oppure da Synaptic / Software)
+./install.sh          # venv in ~/.local/share/cncdeck, "cncdeck" launcher, menu entry
+cncdeck               # or: cncdeck examples/demo.nc
+cncdeck --sim         # try everything without a machine (built-in GRBL simulator)
+cncdeck --no-splash   # skip the 3 second splash screen (or CNCDECK_NO_SPLASH=1)
 ```
 
-- Richiede che nei repository della tua versione di Ubuntu ci siano i pacchetti `python3-pyside6.*` e `python3-pyclipper`
-  (verifica: `apt-cache policy python3-pyside6.qtwidgets python3-pyclipper`). Se mancano, usa `./install.sh`.
-- Porta seriale: `sudo usermod -aG dialout $USER` (poi logout/login); vedi anche `/usr/share/doc/cncdeck/README.Debian`.
-- Se avevi installato con `install.sh`, rimuovi prima quella copia (vedi README.Debian) per non avere due versioni.
-- Per rigenerare il pacchetto: `packaging/build-deb.sh` (richiede `dpkg-deb` e pip; scrive in `dist/`).
+Without installing: `pip install -r requirements.txt && python3 -m cncdeck`.
 
+## Installation as a .deb package (Ubuntu/Debian)
 
-**Porta seriale su Ubuntu** (cause classiche di "non vedo la porta"):
-- l'utente deve stare nel gruppo `dialout`: `sudo usermod -aG dialout $USER`, poi logout/login;
-- `brltty` ruba le schede CH340 (la 1610 Pro ne usa una): `sudo apt remove brltty`.
+A "distribution style" package: it contains only CNC Deck and uses the system Python libraries (`python3-pyside6.*`, `python3-numpy`,
+`python3-serial`, `python3-pyclipper`); only `svgelements` is bundled. Install and remove it with apt or Synaptic:
 
-## Funzioni
+```bash
+sudo apt install ./packaging/deb/cncdeck_0.6.0_all.deb     # also installs the system dependencies
+sudo apt remove cncdeck                                    # uninstall (or from Synaptic / Software)
+```
+
+- Requires the `python3-pyside6.*` and `python3-pyclipper` packages to exist in your Ubuntu release's repositories
+  (check: `apt-cache policy python3-pyside6.qtwidgets python3-pyclipper`). If they are missing, use `./install.sh`.
+- Serial port: `sudo usermod -aG dialout $USER` (then log out and back in); see also `/usr/share/doc/cncdeck/README.Debian`.
+- If you installed with `install.sh`, remove that copy first (see README.Debian) so you do not end up with two versions.
+- To rebuild the package: `packaging/build-deb.sh` (needs `dpkg-deb` and pip; writes to `dist/`).
+
+**Serial port on Ubuntu** (the classic causes of "I cannot see the port"):
+- your user must be in the `dialout` group: `sudo usermod -aG dialout $USER`, then log out and back in;
+- `brltty` steals CH340 boards (the 1610 Pro uses one): `sudo apt remove brltty`.
+
+## Features
 
 | | |
 |---|---|
-| Streaming | protocollo *character-counting* (buffer RX 127 byte), senza pause tra le righe; pausa = feed hold `!`, stop = hold + soft reset (la posizione resta valida) |
-| Viewer 3D | orbita (sx), pan (dx/centrale), zoom (rotella), doppio clic = inquadra; colore per quota Z, rapidi tratteggiati, parte già eseguita in grigio, utensile in tempo reale, ingombro, area macchina ($130-132) |
-| Programma | editor con evidenziazione, riga in esecuzione, stima del tempo (anche residuo, corretta per l'override), avvisi (G1 senza F, righe > 80 caratteri, G-code non supportati, corsa superata) |
-| Riprendi | tasto destro su una riga → *Avvia da riga…* ripristina unità/avanzamento/mandrino, sale, va in XY e scende |
-| DRO | coordinate di lavoro e macchina, azzeramento per asse (`G10 L20 P0`, persistente), vai a zero, Z sicura |
-| Jog | passo 0.01–50 mm o continuo (si ferma subito al rilascio con jog-cancel), tastiera opzionale (frecce, Pag↑/↓) |
-| Probe Z | discesa lenta `G38.2` su piastrina di tocco, azzera Z con lo spessore indicato e risale |
-| Mappa altezze | livellamento automatico: tasta con la sonda una griglia sull'area del G-code e corregge la Z di ogni movimento prima dell'invio. Vedi sotto |
-| Override | avanzamento, rapidi, mandrino (comandi real-time) |
-| Mandrino | M3/M5 con S regolabile |
-| Convertitore SVG | modalità «Convertitore SVG» (interruttore in alto a sinistra): carica un `.svg`, scegli operazioni e utensile, anteprima 3D live, **Salva .gcode** oppure **Invia alla CNC ➜** (carica il G-code nel Sender senza passare dal disco). Vedi sotto |
-| Altro | homing, sblocco, reset, check mode, console con cronologia, editor dei `$$` con descrizioni, 6 macro personalizzabili, drag & drop del file, M6/T convertiti in pausa M0 per il cambio utensile manuale |
+| Streaming | *character-counting* protocol (127-byte RX buffer), no pauses between lines; pause = feed hold `!`, stop = hold + soft reset (the position stays valid) |
+| 3D viewer | orbit (left), pan (right/middle), zoom (wheel), double-click = fit; colour by Z height, dashed rapids, already executed part in grey, live tool, extent, machine area ($130-132) |
+| Program | editor with highlighting, running line, time estimate (also remaining, corrected for the override), warnings (G1 without F, lines > 80 characters, unsupported G-codes, travel exceeded) |
+| Resume | right-click a line → *Start from line…* restores units/feed/spindle, rises, moves in XY and descends |
+| DRO | work and machine coordinates, per-axis zeroing (`G10 L20 P0`, persistent), go to zero, safe Z |
+| Jog | step 0.01–50 mm or continuous (stops at once on release with jog-cancel), optional keyboard (arrows, PgUp/PgDn) |
+| Z probe | slow `G38.2` descent onto a touch plate, zeroes Z with the given thickness and retracts |
+| Height map | automatic leveling: probes a grid over the G-code area and corrects the Z of every move before it is sent. See below |
+| Override | feed, rapids, spindle (real-time commands) |
+| Spindle | M3/M5 with adjustable S |
+| SVG Converter | «SVG Converter» mode (switch at the top left): load an `.svg`, choose operations and tool, live 3D preview, **Save .gcode** or **Send to CNC ➜** (loads the G-code into the Sender without going through the disk). See below |
+| Other | homing, unlock, reset, check mode, console with history, `$$` editor with descriptions, 6 custom macros, file drag & drop, M6/T converted to an M0 pause for manual tool changes |
 
-## Convertitore SVG → G-code
+## SVG → G-code converter
 
-Approccio di [jscut](https://github.com/tbfleming/jscut), riscritto in Python con `pyclipper` (binding di Clipper, la
-stessa libreria geometrica di jscut) e `svgelements` (trasformazioni, unità, viewBox):
+The [jscut](https://github.com/tbfleming/jscut) approach, rewritten in Python with `pyclipper` (Clipper bindings, the same
+geometry library as jscut) and `svgelements` (transforms, units, viewBox):
 
-- **Operazioni** (si parte con la lista vuota, come in jscut: le crei tu con «＋ Aggiungi»; anche più d'una, in sequenza): *Esterno*, *Interno*, *Tasca*, *Incisione* (linea centrale, anche tracciati aperti);
-  per ognuna: forme usate, combinazione (unione / intersezione / differenza / XOR), direzione (convenzionale / concorde, per mandrino
-  orario), profondità totale e per passata, step over, larghezza della fascia, margine, entrata a rampa.
-- **Utensile**: diametro, avanzamento di taglio e di tuffo, Z di sicurezza, M3/M5 opzionali, unità del G-code (mm o pollici), posizione dello zero.
-- **Convenzione Y come jscut**: Y_gcode = −Y_svg. Con «angolo alto-sinistro del disegno» (predefinito) lo zero sta in alto a sinistra del
-  pezzo e il lavoro si sviluppa in Y negativa, esattamente come i file che già usi. Il tuo zero pezzo deve coincidere con quel punto.
-- **Ottimizzazioni rispetto all'output jscut**: spostamenti con `G0` (non `G1` con feed enormi), nessun punto duplicato o allineato,
-  avanzamento scritto solo quando cambia, righe corte, intestazione `G21 G90 G94`, fine con `G0` a Z sicura e `M2`. Il G-code generato
-  passa dallo stesso parser e dallo stesso streaming del Sender: un test lo trasmette al simulatore GRBL senza errori.
-- Il mandrino **non** viene acceso di default (come jscut): usa il pulsante Mandrino del Sender oppure attiva M3/M5 nel convertitore.
-- «Invia alla CNC» **non avvia** il lavoro: porta il programma nel Sender e passa a quella modalità; controlla lo zero e premi Avvia.
+- **Operations** (you start with an empty list, like jscut: create them with «＋ Add»; several are allowed, run in sequence): *Outside*, *Inside*, *Pocket*, *Engrave* (centre line, open paths too);
+  for each one: shapes used, combination (union / intersection / difference / XOR), direction (conventional / climb, for a
+  clockwise spindle), total depth and depth per pass, step over, band width, offset, ramp entry.
+- **Tool**: diameter, cut and plunge feed rates, safe Z, optional M3/M5, G-code units (mm or inches), zero position.
+- **Y convention like jscut**: Y_gcode = −Y_svg. With «Top-left corner of the design» (default) the zero sits at the top left of the
+  part and the job extends into negative Y, exactly like the files you already use. Your work zero must coincide with that point.
+- **Optimisations over jscut's output**: moves with `G0` (not `G1` with huge feeds), no duplicate or collinear points,
+  feed written only when it changes, short lines, `G21 G90 G94` header, ends with `G0` to safe Z and `M2`. The generated G-code
+  goes through the same parser and the same streaming as the Sender: a test sends it to the GRBL simulator without errors.
+- The spindle is **not** switched on by default (like jscut): use the Spindle button in the Sender or enable M3/M5 in the converter.
+- «Send to CNC» does **not** start the job: it moves the program into the Sender and switches to that mode; check the zero and press Run.
 
-- **Linguette di fissaggio** (solo Esterno/Interno): lungo il taglio la fresa resta a `Altezza` mm dal fondo, così il pezzo non si stacca
-  né si muove. *Automatiche*: N linguette equidistanti sul contorno di ogni pezzo (i fori non ne hanno). *Da forme SVG*: disegna un
-  piccolo cerchio/rettangolo a cavallo del bordo e marcalo come linguetta; la forma non viene fresata e copre il percorso a un
-  raggio utensile da lei. Richiedono una sola passata laterale (larghezza = diametro utensile) e un'altezza minore della profondità.
+- **Holding tabs** (Outside/Inside only): along the cut the tool stays at `Height` mm from the bottom, so the part neither detaches
+  nor moves. *Automatic*: N evenly spaced tabs on the contour of each part (holes get none). *From SVG shapes*: draw a
+  small circle/rectangle straddling the edge and mark it as a tab; the shape is not milled and covers the path up to one
+  tool radius away from it. They need a single side pass (width = tool diameter) and a height smaller than the depth.
 
-Non implementati rispetto a jscut: *V-pocket*, Z origin dal fondo del materiale, conversione da testo SVG (converti in tracciati).
+Not implemented compared to jscut: *V-pocket*, Z origin from the bottom of the material, SVG text conversion (convert to paths).
 
-Non implementato (rispetto a Candle): **height map / autolivellamento**. Il viewer assume programmi in coordinate
-assolute (G90) che partono dallo zero pezzo; un programma solo-G91 viene disegnato a partire da 0,0,0.
+The viewer assumes absolute-coordinate programs (G90) starting from the work zero; a G91-only program is drawn starting from 0,0,0.
 
-## Mappa altezze (livellamento con la sonda)
+## Height map (leveling with the probe)
 
-Solo nel Sender. GRBL 1.1 non compensa la planarità, quindi lo fa CNC Deck: misura la superficie e corregge il G-code prima di inviarlo
-(il file originale non viene modificato).
+Sender only. GRBL 1.1 does not compensate for flatness, so CNC Deck does it: it measures the surface and corrects the G-code before sending it
+(the original file is not modified).
 
-1. Carica il G-code. Spegni il mandrino, collega la pinza della sonda alla fresa e al materiale (rame/metallo), azzera X, Y e Z
-   **sulla superficie nell'origine del lavoro** e solleva la fresa. Se il materiale non conduce, appoggia una piastrina e indica lo spessore.
-2. Scheda **Mappa altezze** → *Tasta area del lavoro*: la griglia copre l'ingombro delle sole lavorazioni più il margine, con passo ≤ al valore scelto.
-   Ogni punto: sale a Z sicura, si sposta, scende veloce fino a *Avvicin.* sopra l'ultimo contatto e poi tasta lentamente (`G38.2`).
-   La prima discesa parte da Z sicura. Il tasto *Annulla* (o Stop) interrompe; nessun contatto entro *Prof. max*, un allarme o un errore fermano tutto.
-3. La mappa si vede nel viewer (rilievo esagerato, colori per quota). Con «Applica la mappa» spuntato, *Avvia* e *Avvia da riga…* inviano
-   il G-code corretto: ogni taglio è spezzato a ogni linea della griglia e a ogni punto si somma l'altezza della superficie (interpolazione bilineare).
-   Gli archi diventano segmenti `G1`; i rapidi correggono solo la quota di arrivo. Si può salvare/caricare la mappa (`.json`).
+1. Load the G-code. Switch the spindle off, connect the probe clip to the tool and to the material (copper/metal), zero X, Y and Z
+   **on the surface at the job origin** and raise the tool. If the material is not conductive, put a plate on it and enter its thickness.
+2. **Height map** card → *Probe the job area*: the grid covers the extent of the cutting moves only, plus the margin, with a step ≤ the chosen value.
+   For each point: rise to safe Z, move, descend quickly down to *Approach* above the last contact, then probe slowly (`G38.2`).
+   The first descent starts from safe Z. *Cancel* (or Stop) aborts; no contact within *Max depth*, an alarm or an error stops everything.
+3. The map is shown in the viewer (exaggerated relief, colours by height). With «Apply the map when I run the program» ticked, *Run* and *Start from line…* send
+   the corrected G-code: every cut is split at each grid line and the surface height is added at each point (bilinear interpolation).
+   Arcs become `G1` segments; rapids only correct the end height. The map can be saved/loaded (`.json`).
 
-Limiti e cautele:
-- La mappa è in coordinate **macchina**: resta valida se cambi lo zero pezzo, ma **non** se sposti il pezzo o il piano.
-- Programmi con `G92`, `G10`, `G55`–`G59` sono rifiutati (cambierebbero il sistema di coordinate); dopo `G28/G30/G53` servono movimenti assoluti.
-- Fuori dall'area mappata si usa l'altezza del bordo (te lo segnala prima di partire).
-- Precisione: quella della tua sonda e di GRBL (tipicamente 0,01–0,03 mm a 25 mm/min). Per fresature profonde serve a poco; per incisioni/PCB sì.
-- Tempi: griglia da 10 mm su 150×90 mm ≈ 150 punti, 10–15 minuti. Il tasto *Tasta* mostra la stima.
-- Collaudato solo sul simulatore (piano inclinato): **prova la prima volta su scarto, a mandrino spento.**
+Limits and cautions:
+- The map is in **machine** coordinates: it stays valid if you change the work zero, but **not** if you move the workpiece or the bed.
+- Programs with `G92`, `G10`, `G55`–`G59` are refused (they would change the coordinate system); after `G28/G30/G53` absolute moves are required.
+- Outside the mapped area the edge height is used (you are warned before starting).
+- Accuracy: that of your probe and of GRBL (typically 0.01–0.03 mm at 25 mm/min). Of little use for deep milling; fine for engraving/PCBs.
+- Time: a 10 mm grid over 150×90 mm ≈ 150 points, 10–15 minutes. The probe confirmation dialog shows the estimate.
+- Tested only on the simulator (tilted plane): **the first time, try it on scrap, with the spindle off.**
 
-## Sviluppo
+## Development
 
 ```bash
 pip install -e .[dev]
-python -m pytest            # test: parser, protocollo/streaming contro il simulatore, conversione SVG/CAM, UI offscreen
+python -m pytest            # tests: parser, protocol/streaming against the simulator, SVG/CAM conversion, offscreen UI
 python examples/make_demo.py
-QT_QPA_PLATFORM=offscreen python3 docs/make_screenshots.py   # rigenera le immagini del README
+QT_QPA_PLATFORM=offscreen python3 docs/make_screenshots.py   # regenerate the README images
 ```
 
-`cncdeck/simulator.py` emula GRBL 1.1 (buffer RX da 127 byte, planner da 15 blocchi, hold/jog-cancel, WCO, probe,
-override) ed è usato sia dalla modalità `--sim` sia dai test: i test verificano che lo streaming non superi
-mai il buffer RX.
+`cncdeck/simulator.py` emulates GRBL 1.1 (127-byte RX buffer, 15-block planner, hold/jog-cancel, WCO, probe,
+overrides) and is used both by the `--sim` mode and by the tests: the tests check that streaming never exceeds
+the RX buffer.
 
-**Importante**: i test girano sul simulatore; il comportamento sulla scheda reale va verificato con cautela
-(prima un giro a vuoto, o *Check mode*, senza fresa e con la mano sull'emergenza).
+**Important**: the tests run on the simulator; behaviour on the real board must be checked with care
+(first a dry run, or *Check mode*, without a tool and with a hand on the emergency stop).

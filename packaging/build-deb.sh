@@ -50,19 +50,19 @@ cp README.md "$STAGE/usr/share/doc/cncdeck/README.md"
 gzip -9n -c packaging/cncdeck.1 > "$STAGE/usr/share/man/man1/cncdeck.1.gz"
 
 cat > "$STAGE/usr/share/doc/cncdeck/README.Debian" <<'TXT'
-CNC Deck per Debian/Ubuntu
+CNC Deck for Debian/Ubuntu
 ==========================
 
-Porta seriale
-  L'utente deve far parte del gruppo "dialout" per usare /dev/ttyUSB* e /dev/ttyACM*:
-      sudo usermod -aG dialout $USER      (poi uscire e rientrare dalla sessione)
-  Se la scheda con chip CH340 (CNC 1610 Pro) scompare subito dopo averla collegata, il servizio
-  "brltty" la sta catturando:  sudo apt remove brltty
+Serial port
+  Your user must be in the "dialout" group to use /dev/ttyUSB* and /dev/ttyACM*:
+      sudo usermod -aG dialout $USER      (then log out and back in)
+  If a board with a CH340 chip (CNC 1610 Pro / 3018) disappears right after plugging it in, the
+  "brltty" service is grabbing it:  sudo apt remove brltty
 
-Prova senza macchina:  cncdeck --sim
-Esempi: /usr/share/doc/cncdeck/examples/
+Try it without a machine:  cncdeck --sim
+Examples: /usr/share/doc/cncdeck/examples/
 
-Se hai installato CNC Deck anche con install.sh (in ~/.local), rimuovilo per evitare due copie:
+If you also installed CNC Deck with install.sh (in ~/.local), remove that copy to avoid two versions:
   rm -rf ~/.local/share/cncdeck ~/.local/bin/cncdeck ~/.local/share/applications/cncdeck.desktop
 TXT
 
@@ -100,7 +100,7 @@ TXT
 {
   echo "cncdeck ($VERSION) stable; urgency=medium"
   echo
-  echo "  * Pacchetto Debian/Ubuntu di CNC Deck $VERSION (dipendenze dalla distribuzione)."
+  echo "  * Debian/Ubuntu package of CNC Deck $VERSION (dependencies from the distribution)."
   echo
   echo " -- $MAINT  $(date -R)"
 } | gzip -9n > "$STAGE/usr/share/doc/cncdeck/changelog.gz"
@@ -116,14 +116,14 @@ Recommends: libxcb-cursor0, libxkbcommon-x11-0
 Maintainer: $MAINT
 Homepage: https://github.com/stefanolmo/cncgrbl
 Installed-Size: $(du -sk "$STAGE" | cut -f1)
-Description: sender G-code per CNC GRBL 1.1 con convertitore SVG
- CNC Deck invia file G-code a una CNC con GRBL 1.1 (pensato per la 1610 Pro)
- via seriale, con anteprima 3D, DRO, jog, probe Z, override e impostazioni
- della scheda.
+Description: G-code sender for GRBL 1.1 CNCs with an SVG converter
+ CNC Deck streams G-code files to a GRBL 1.1 CNC (designed for the 1610 Pro)
+ over a serial port, with a 3D preview, DRO, jogging, Z probe, overrides,
+ board settings and height-map leveling.
  .
- Il convertitore integrato trasforma file SVG in G-code (operazioni esterno,
- interno, tasca, incisione e linguette di fissaggio, sul modello di jscut)
- e lo passa al sender con un clic.
+ The built-in converter turns SVG files into G-code (outside, inside, pocket
+ and engrave operations plus holding tabs, modelled on jscut) and hands it
+ to the sender with one click.
 TXT
 
 cat > "$STAGE/DEBIAN/postinst" <<'SH'
@@ -154,4 +154,4 @@ chmod 755 "$STAGE/usr/bin/cncdeck"
 
 mkdir -p dist
 dpkg-deb --root-owner-group --build "$STAGE" "dist/$PKG.deb" >/dev/null
-echo "Creato dist/$PKG.deb ($(du -h "dist/$PKG.deb" | cut -f1))"
+echo "Created dist/$PKG.deb ($(du -h "dist/$PKG.deb" | cut -f1))"

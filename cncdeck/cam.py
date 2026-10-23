@@ -32,7 +32,7 @@ class CamPath:
 
 @dataclass
 class Operation:
-    name: str = "Operazione"
+    name: str = "Operation"
     kind: str = "outside"            # inside | outside | pocket | engrave
     shapes: set[str] | None = None   # None = all shapes
     combine: str = "union"           # union | intersect | diff | xor
@@ -266,16 +266,16 @@ def build_paths(doc: SvgDoc, op: Operation, job: Job, warnings: list[str]) -> li
     if op.tab_mode == "shapes" and op.kind in ("inside", "outside"):
         sel = [s for s in sel if s.sid not in op.tab_shapes]      # tab markers are not part of the cut
     if not sel:
-        warnings.append(f"{op.name}: nessuna forma selezionata")
+        warnings.append(f"{op.name}: no shape selected")
         return []
     if op.kind == "engrave":
         return engrave(doc, ids, op.climb)
     for s in sel:
         if not any(sp.closed for sp in s.subpaths):
-            warnings.append(f"{op.name}: «{s.label}» è un tracciato aperto, ignorato (usa Incisione)")
+            warnings.append(f"{op.name}: «{s.label}» is an open path, ignored (use Engrave)")
     geometry = combine([shape_polygons(s) for s in sel], op.combine)
     if not geometry:
-        warnings.append(f"{op.name}: nessuna forma chiusa nella selezione")
+        warnings.append(f"{op.name}: no closed shape in the selection")
         return []
     if abs(op.margin) > 1e-9:
         geometry = offset(geometry, op.margin if op.kind != "inside" else -op.margin)
@@ -288,7 +288,7 @@ def build_paths(doc: SvgDoc, op: Operation, job: Job, warnings: list[str]) -> li
         paths = outline(geometry, job.tool_diameter, op.kind == "inside", op.width or job.tool_diameter,
                         op.step_over, climb)
     if not paths:
-        warnings.append(f"{op.name}: l'utensile da {job.tool_diameter:g} mm è troppo grande per questa forma")
+        warnings.append(f"{op.name}: the {job.tool_diameter:g} mm tool is too large for this shape")
     return paths
 
 
@@ -389,7 +389,7 @@ def tab_plan(paths: list[CamPath], pts_list: list[np.ndarray], op: Operation, jo
             n = min(op.tab_count, int(0.5 * total / max(op.tab_width, 1e-6)))
             if n < 1:
                 if not warned_short:
-                    warnings.append(f"{op.name}: contorno troppo corto per linguette da {op.tab_width:g} mm")
+                    warnings.append(f"{op.name}: contour too short for tabs of {op.tab_width:g} mm")
                     warned_short = True
                 plans.append(None)
                 continue
@@ -427,10 +427,10 @@ def design_guides(doc: SvgDoc, job: Job, ids: set[str] | None = None) -> list[np
 def generate(doc: SvgDoc, ops: list[Operation], job: Job, source_name: str = "") -> CamResult:
     res = CamResult()
     if not doc.shapes:
-        res.warnings.append("Nessuna forma da lavorare")
+        res.warnings.append("No shapes to machine")
         return res
     if job.tool_diameter <= 0:
-        res.warnings.append("Diametro utensile non valido")
+        res.warnings.append("Invalid tool diameter")
         return res
     ids_all: set[str] = set()
     for op in ops:
@@ -451,8 +451,8 @@ def generate(doc: SvgDoc, ops: list[Operation], job: Job, source_name: str = "")
         return _fmt(f * k)
 
     lines: list[str] = [
-        f"; CNC Deck - conversione SVG -> G-code (approccio jscut){' - ' + source_name if source_name else ''}",
-        f"; Utensile {job.tool_diameter:g} mm, avanzamento {job.cut_feed:g}, tuffo {job.plunge_feed:g} mm/min",
+        f"; CNC Deck - SVG -> G-code conversion (jscut approach){' - ' + source_name if source_name else ''}",
+        f"; Tool {job.tool_diameter:g} mm, cut feed {job.cut_feed:g}, plunge {job.plunge_feed:g} mm/min",
         "G21" if job.units == "mm" else "G20",
         "G90",
         "G94",
@@ -510,7 +510,7 @@ def generate(doc: SvgDoc, ops: list[Operation], job: Job, source_name: str = "")
         paths = build_paths(doc, op, job, res.warnings)
         if not paths:
             continue
-        lines.append(f"; Operazione {oi}: {op.name} ({op.kind}), profondita {op.cut_depth:g}, passata {op.pass_depth:g}")
+        lines.append(f"; Operation {oi}: {op.name} ({op.kind}), depth {op.cut_depth:g}, pass {op.pass_depth:g}")
         top = 0.0
         bottom = -abs(op.cut_depth)
         pass_depth = max(abs(op.pass_depth), 0.01)
@@ -519,25 +519,25 @@ def generate(doc: SvgDoc, ops: list[Operation], job: Job, source_name: str = "")
         plans: list = [None] * len(paths)
         if tabs_apply(op):
             if op.tab_height <= 0 or op.tab_height >= abs(op.cut_depth):
-                res.warnings.append(f"{op.name}: altezza linguette ({op.tab_height:g} mm) non valida per una "
-                                    f"profondità di {abs(op.cut_depth):g} mm: linguette ignorate")
+                res.warnings.append(f"{op.name}: tab height ({op.tab_height:g} mm) is not valid for a "
+                                    f"depth of {abs(op.cut_depth):g} mm: tabs ignored")
             elif op.width > job.tool_diameter + 1e-9:
-                res.warnings.append(f"{op.name}: le linguette richiedono una sola passata (larghezza = diametro utensile)")
+                res.warnings.append(f"{op.name}: tabs require a single pass (width = tool diameter)")
             else:
                 tab_z = bottom + op.tab_height
                 zone = tab_zone(doc, op, job) if op.tab_mode == "shapes" else []
                 if op.tab_mode == "shapes" and not zone:
-                    res.warnings.append(f"{op.name}: nessuna forma linguetta selezionata")
+                    res.warnings.append(f"{op.name}: no tab shape selected")
                 plans = tab_plan(paths, pts_list, op, job, zone, res.warnings)
                 if not any(plans) and op.tab_mode == "shapes" and zone:
-                    res.warnings.append(f"{op.name}: le forme linguetta non toccano il percorso")
+                    res.warnings.append(f"{op.name}: the tab shapes do not touch the path")
         for pi, (cp, pts, plan) in enumerate(zip(paths, pts_list, plans)):
             if len(pts) < 2:
                 continue
             n_paths += 1
             nodes, flags = plan if plan else (pts, [False] * (len(pts) - 1))
             start = nodes[0]
-            lines.append(f"; Percorso {pi}" + (" (con linguette)" if plan else ""))
+            lines.append(f"; Path {pi}" + (" (with tabs)" if plan else ""))
             lines.append(f"G0 X{X(start[0])} Y{Y(start[1])}")
             zc = job.safe_z
             if job.approach_z < job.safe_z:
@@ -572,7 +572,7 @@ def generate(doc: SvgDoc, ops: list[Operation], job: Job, source_name: str = "")
     res.n_paths = n_paths
     if n_paths == 0:
         # nothing to cut: never hand a header-only program to the sender
-        res.warnings.append("Nessun percorso generato")
+        res.warnings.append("No toolpath generated")
         return res
     if job.spindle:
         lines.append("M5")

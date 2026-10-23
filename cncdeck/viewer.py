@@ -53,7 +53,7 @@ class ToolpathView(QWidget):
         self.show_envelope = False
         self.guides: list = []
         self.heightmap = None                   # HeightMap in work coordinates (auto-leveling), or None
-        self.empty_message = "Apri un file G-code per vedere il percorso\n(trascina qui un file .nc / .gcode)"
+        self.empty_message = "Open a G-code file to see the toolpath\n(drag a .nc / .gcode file here)"
         self.envelope: tuple[np.ndarray, np.ndarray] | None = None  # (min,max) in work coords
         self._drag = None
         self._cache_key = None
@@ -323,7 +323,7 @@ class ToolpathView(QWidget):
         p.setFont(QFont("monospace", 8))
         p.setPen(QColor(255, 255, 255, 170))
         a = self.project(np.array([[hm.xs[0], hm.ys[-1], 0.0]]))[0]
-        p.drawText(QPointF(a[0], a[1] - 6), f"mappa {nx}×{ny}  Δ {spread:.3f} mm  (rilievo ×{exag:.0f})")
+        p.drawText(QPointF(a[0], a[1] - 6), f"map {nx}×{ny}  Δ {spread:.3f} mm  (relief ×{exag:.0f})")
 
     def _draw_axes(self, p: QPainter) -> None:
         lo, hi = self._scene_bounds()
@@ -479,7 +479,7 @@ class ToolpathView(QWidget):
 
 
 def add_view_buttons(view: "ToolpathView") -> QWidget:
-    """Floating row of view presets on top of a ToolpathView (3D / Alto / Fronte / Lato / Adatta / Rapidi)."""
+    """Floating row of view presets on top of a ToolpathView (3D / Top / Front / Side / Fit / Rapids)."""
     from PySide6.QtWidgets import QHBoxLayout, QToolButton
     bar = QWidget(view)
     bar.setStyleSheet("background: transparent;")
@@ -502,12 +502,12 @@ def add_view_buttons(view: "ToolpathView") -> QWidget:
         view._invalidate()
         view.update()
 
-    mk("3D", "Vista isometrica", lambda: view.set_view("iso"))
-    mk("Alto", "Vista dall'alto", lambda: view.set_view("top"))
-    mk("Fronte", "Vista frontale", lambda: view.set_view("front"))
-    mk("Lato", "Vista laterale", lambda: view.set_view("right"))
-    mk("Adatta", "Inquadra tutto (doppio clic)", view.fit)
-    mk("Rapidi", "Mostra i movimenti rapidi", rapids, True, True)
+    mk("3D", "Isometric view", lambda: view.set_view("iso"))
+    mk("Top", "Top view", lambda: view.set_view("top"))
+    mk("Front", "Front view", lambda: view.set_view("front"))
+    mk("Side", "Side view", lambda: view.set_view("right"))
+    mk("Fit", "Fit everything (double-click)", view.fit)
+    mk("Rapids", "Show rapid moves", rapids, True, True)
     bar.move(10, 10)
     bar.adjustSize()
     return bar

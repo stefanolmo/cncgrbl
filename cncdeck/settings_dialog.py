@@ -14,16 +14,16 @@ class GrblSettingsDialog(QDialog):
 
     def __init__(self, settings: dict[int, float], parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Impostazioni GRBL ($$)")
+        self.setWindowTitle("GRBL settings ($$)")
         self.resize(640, 640)
         lay = QVBoxLayout(self)
-        hint = QLabel("Le modifiche vengono scritte nella EEPROM della scheda. Cambia solo ciò che sai: "
-                      "valori errati su passi/mm o velocità possono far muovere la macchina in modo imprevisto.")
+        hint = QLabel("Changes are written to the board EEPROM. Only change what you understand: "
+                      "wrong steps/mm or rate values can make the machine move unexpectedly.")
         hint.setWordWrap(True)
         hint.setObjectName("muted")
         lay.addWidget(hint)
         self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["$", "Descrizione", "Valore", "Unità"])
+        self.table.setHorizontalHeaderLabels(["$", "Description", "Value", "Unit"])
         self.table.verticalHeader().hide()
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -34,10 +34,10 @@ class GrblSettingsDialog(QDialog):
         self.table.setColumnWidth(3, 80)
         lay.addWidget(self.table, 1)
         row = QHBoxLayout()
-        self.btn_refresh = QPushButton("Rileggi")
-        self.btn_apply = QPushButton("Scrivi modifiche")
+        self.btn_refresh = QPushButton("Reload")
+        self.btn_apply = QPushButton("Write changes")
         self.btn_apply.setObjectName("primary")
-        self.btn_close = QPushButton("Chiudi")
+        self.btn_close = QPushButton("Close")
         row.addWidget(self.btn_refresh)
         row.addStretch()
         row.addWidget(self.btn_close)
@@ -67,7 +67,7 @@ class GrblSettingsDialog(QDialog):
         for n in sorted(settings):
             r = self.table.rowCount()
             self.table.insertRow(r)
-            desc, unit = SETTING_INFO.get(n, ("(non documentato)", ""))
+            desc, unit = SETTING_INFO.get(n, ("(undocumented)", ""))
             val = self._fmt(settings[n])
             self._orig[n] = val
             for c, text in enumerate((f"${n}", desc, edited.get(n, val), unit)):

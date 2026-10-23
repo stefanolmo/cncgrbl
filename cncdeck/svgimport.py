@@ -98,7 +98,7 @@ def parse_svg(text: str, dpi: float = 96.0, scale: float = 1.0, tolerance: float
     try:
         svg = SVG.parse(io.StringIO(text), reify=True, ppi=dpi)
     except Exception as e:  # malformed XML etc.
-        doc.warnings.append(f"SVG non valido: {e}")
+        doc.warnings.append(f"Invalid SVG: {e}")
         return doc
     mm_per_unit = MM_PER_INCH / dpi * scale
     try:
@@ -109,7 +109,7 @@ def parse_svg(text: str, dpi: float = 96.0, scale: float = 1.0, tolerance: float
     counter = 0
     for el in svg.elements():
         if isinstance(el, Text):
-            doc.warnings.append("Testo ignorato: convertilo in tracciati (Inkscape: Tracciato → Da oggetto a tracciato)")
+            doc.warnings.append("Text ignored: convert it to paths (Inkscape: Path → Object to Path)")
             continue
         if not isinstance(el, Shape):
             continue
@@ -121,7 +121,7 @@ def parse_svg(text: str, dpi: float = 96.0, scale: float = 1.0, tolerance: float
             path.approximate_arcs_with_cubics()
             segments = list(path.segments(transformed=True))
         except Exception as e:
-            doc.warnings.append(f"Elemento {el.id or type(el).__name__} non convertibile: {e}")
+            doc.warnings.append(f"Element {el.id or type(el).__name__} cannot be converted: {e}")
             continue
         subpaths: list[Subpath] = []
         cur: list[tuple[float, float]] = []
@@ -161,7 +161,7 @@ def parse_svg(text: str, dpi: float = 96.0, scale: float = 1.0, tolerance: float
         doc.shapes.append(SvgShape(sid=_unique(sid, doc), label=sid, kind=kind, subpaths=subpaths,
                                    fill_rule="evenodd" if fr == "evenodd" else "nonzero"))
     if not doc.shapes:
-        doc.warnings.append("Nessuna forma trovata nell'SVG")
+        doc.warnings.append("No shapes found in the SVG")
     return doc
 
 

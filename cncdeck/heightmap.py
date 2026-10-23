@@ -104,12 +104,12 @@ class HeightMap:
             xs, ys = np.array(d["xs"], float), np.array(d["ys"], float)
             z = np.array([[np.nan if v is None else v for v in row] for row in d["z"]], float)
             if z.shape != (len(ys), len(xs)) or len(xs) < 2 or len(ys) < 2:
-                raise ValueError("dimensioni incoerenti")
+                raise ValueError("inconsistent dimensions")
             if np.any(np.diff(xs) <= 0) or np.any(np.diff(ys) <= 0):
-                raise ValueError("assi non crescenti")
+                raise ValueError("axes not increasing")
             return cls(xs, ys, z, d.get("created", ""), d.get("note", ""))
         except (KeyError, TypeError, ValueError) as e:
-            raise HeightMapError(f"File mappa altezze non valido: {e}") from e
+            raise HeightMapError(f"Invalid height map file: {e}") from e
 
 
 def _fmt(v: float, inch: bool) -> str:
@@ -141,7 +141,7 @@ def correct_program(commands: list[tuple[int, str]], hm: HeightMap, start=None) 
     point corrected. Raises HeightMapError for programs that change the work coordinate system.
     """
     if not hm.complete:
-        raise HeightMapError("La mappa delle altezze è incompleta")
+        raise HeightMapError("The height map is incomplete")
     out: list[tuple[int, str]] = []
     abs_ = True          # distance mode as seen by the program
     out_abs = True       # distance mode the machine is actually in after the lines emitted so far
@@ -160,8 +160,8 @@ def correct_program(commands: list[tuple[int, str]], hm: HeightMap, start=None) 
         gs, ms, vals = _split_words(cmd)
         for g in gs:
             if g in (92, 10) or g in (55, 56, 57, 58, 59):
-                raise HeightMapError(f"Riga {src + 1}: G{g:g} cambia il sistema di coordinate, "
-                                     "incompatibile con la mappa delle altezze")
+                raise HeightMapError(f"Line {src + 1}: G{g:g} changes the coordinate system, "
+                                     "which is incompatible with the height map")
         had_mode = 90 in gs or 91 in gs
         if 90 in gs:
             abs_ = True
@@ -196,8 +196,8 @@ def correct_program(commands: list[tuple[int, str]], hm: HeightMap, start=None) 
             continue
 
         if any(p is None for p in pos):
-            raise HeightMapError(f"Riga {src + 1}: posizione di partenza sconosciuta "
-                                 "(dopo G28/G30/G53 o senza posizione iniziale): usa movimenti assoluti")
+            raise HeightMapError(f"Line {src + 1}: start position unknown "
+                                 "(after G28/G30/G53 or with no initial position): use absolute moves")
         tgt = list(pos)
         for i, c in enumerate("XYZ"):
             if c in vals:
@@ -231,12 +231,12 @@ def correct_program(commands: list[tuple[int, str]], hm: HeightMap, start=None) 
             pts = [b]
         else:
             if plane != 17:
-                raise HeightMapError(f"Riga {src + 1}: archi sui piani G18/G19 non supportati con la mappa delle altezze")
+                raise HeightMapError(f"Line {src + 1}: arcs on the G18/G19 planes are not supported with the height map")
             cw = motion == 2
             if "R" in vals:
                 r = vals["R"] * k
                 if (b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2 == 0 or 4 * r * r < (b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2:
-                    raise HeightMapError(f"Riga {src + 1}: arco con raggio non valido")
+                    raise HeightMapError(f"Line {src + 1}: arc with invalid radius")
                 ca, cb = arc_center_from_radius(a[0], a[1], b[0], b[1], r, cw)
             else:
                 ca, cb = a[0] + vals.get("I", 0.0) * k, a[1] + vals.get("J", 0.0) * k

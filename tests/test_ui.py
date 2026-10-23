@@ -152,7 +152,7 @@ def test_view_is_y_down_and_has_no_view_or_invert_selectors(win):
     win.view.set_view("top")
     p = win.view.project(np.array([[0, 5.0, 0], [0, 0, 0]]))
     assert p[0][1] < p[1][1]                                         # Y+ drawn upwards, like the up arrow
-    assert not [c for c in win.findChildren(QCheckBox) if "nverti" in c.text()]
+    assert not [c for c in win.findChildren(QCheckBox) if "nvert" in c.text()]
     assert not [c for c in win.view.findChildren(QComboBox)]
 
 
@@ -160,7 +160,7 @@ def test_no_bed_wording_and_version_in_title(win):
     from cncdeck import __version__
     assert __version__ in win.windowTitle()
     texts = " ".join(w.text() for w in win.findChildren(__import__("PySide6.QtWidgets", fromlist=["QCheckBox"]).QCheckBox))
-    assert "piatto" not in texts.lower()
+    assert "platen" not in texts.lower()
 
 
 def test_loaded_file_positive_y_above_origin(win, tmp_path):
@@ -216,9 +216,9 @@ def test_grbl_error_shows_nonmodal_bar_and_app_stays_closable(win, tmp_path, mon
     win.run_program()
     assert pump(lambda: win.error_bar.isVisible(), 20)
     pump(lambda: False, 0.5)
-    assert "error:34" in win.error_label.text() and "Programma in pausa" in win.error_label.text()
-    assert not any("rifiutato" in m for m in modal)            # no blocking dialog for the error
-    # the main window still reacts: Interrompi aborts, bar disappears
+    assert "error:34" in win.error_label.text() and "Program paused" in win.error_label.text()
+    assert not any("rejected" in m for m in modal)            # no blocking dialog for the error
+    # the main window still reacts: Abort aborts, bar disappears
     win.btn_err_stop.click()
     assert pump(lambda: not win._running and not win.error_bar.isVisible(), 15)
 
@@ -262,10 +262,10 @@ def test_converter_generates_preview_and_enables_actions(win):
     assert len(c.doc.shapes) == 4 and c.result.gcode.startswith("; CNC Deck")
     assert c.btn_send.isEnabled() and c.btn_save.isEnabled()
     assert len(c.view.guides) >= 4 and c.view.program is c.program          # design + toolpath in the preview
-    assert "tempo stimato" in c.summary.text()
+    assert "estimated time" in c.summary.text()
     c.j_tool.setValue(2.0)                                                     # edit -> debounced regeneration
     assert not c.btn_send.isEnabled()                                          # stale G-code can't be sent
-    assert pump(lambda: c.btn_send.isEnabled() and "Utensile 2 mm" in c.result.gcode, 30)
+    assert pump(lambda: c.btn_send.isEnabled() and "Tool 2 mm" in c.result.gcode, 30)
 
 
 def test_send_to_cnc_loads_sender_in_memory_without_files(win, tmp_path, monkeypatch):
@@ -284,7 +284,7 @@ def test_send_to_cnc_loads_sender_in_memory_without_files(win, tmp_path, monkeyp
     assert pump(lambda: win.program is not None and len(win.program.commands) > 10, 20)
     assert win.editor.toPlainText() == gcode
     assert win.program.commands == __import__("cncdeck.gcode", fromlist=["parse_program"]).parse_program(gcode).commands
-    assert win.act_run.isEnabled()                                             # ready: needs an explicit Avvia
+    assert win.act_run.isEnabled()                                             # ready: needs an explicit Run
     assert "in.gcode" in win.windowTitle()
     assert not [f for f in os.listdir(tmp_path) if f.endswith((".gcode", ".nc"))]
     assert not win._running                                                    # nothing starts by itself
@@ -387,7 +387,7 @@ def test_converter_starts_with_no_operations_and_nothing_to_send(win):
     assert c.ops == [] and c.result.gcode == "" and c.editor.toPlainText() == ""     # no G-code invented for the user
     assert not c.btn_send.isEnabled() and not c.btn_save.isEnabled()
     assert len(c.view.guides) >= 4 and c.view.program is None                        # but the design is shown
-    assert "Nessuna operazione" in c.summary.text()
+    assert "No operations" in c.summary.text()
     c.btn_send.click()                                                               # disabled: must do nothing
     assert win.mode == 1 and win.program is None
     QApplication.instance().processEvents()
@@ -416,7 +416,7 @@ def test_operation_with_no_selected_shapes_produces_no_gcode(win):
     c.generate_now()
     assert pump(lambda: c.result is not None and not c._dirty and c.result.gcode == "", 10)
     assert not c.btn_send.isEnabled()
-    assert any("nessuna forma" in m.lower() or "Nessun percorso" in m for m in c.messages.toPlainText().splitlines())
+    assert any("no shape" in m.lower() or "No toolpath" in m for m in c.messages.toPlainText().splitlines())
 
 
 # ---------------------------------------------------------------- holding tabs in the converter UI
@@ -425,7 +425,7 @@ def _conv_with_op(win, svg="examples/demo.svg"):
     c = win.converter
     assert c.load_svg(svg)
     c._add_op()
-    c.cur_op().shapes = {"contorno"}
+    c.cur_op().shapes = {"outline"}
     c.w_cut.setValue(3.0)
     c.w_pass.setValue(1.5)
     return c
@@ -451,7 +451,7 @@ def test_auto_tabs_end_up_in_the_gcode_and_the_sender(win):
     c.w_tabcount.setValue(5)
     c.w_tabw.setValue(3.0)
     c.w_tabh.setValue(1.0)
-    assert pump(lambda: c.btn_send.isEnabled() and "(con linguette)" in c.result.gcode, 30)
+    assert pump(lambda: c.btn_send.isEnabled() and "(with tabs)" in c.result.gcode, 30)
     lifts = [l for l in c.result.gcode.splitlines() if l.startswith("G1 Z-2")]
     assert len(lifts) == 5                                                       # 5 tabs on the one contour
     c.btn_send.click()
@@ -479,12 +479,12 @@ def test_shape_marker_is_a_tab_not_a_cut(win, tmp_path):
     assert pump(lambda: c.btn_send.isEnabled() and not c._dirty, 30)
     g = c.result.gcode
     # 'part' and 'other' are cut (the marker circle merges into 'part' only if it were a cut shape): 2 paths, 1 tab
-    assert g.count("; Percorso") == 2 and g.count("(con linguette)") == 1
+    assert g.count("; Path") == 2 and g.count("(with tabs)") == 1
     c.cur_op().tab_shapes = set()                                                # no marker any more: nothing excluded
     c.cur_op().tab_mode = "none"
     c.generate_now()
     assert pump(lambda: c.btn_send.isEnabled() and not c._dirty, 30)
-    assert "(con linguette)" not in c.result.gcode
+    assert "(with tabs)" not in c.result.gcode
 
 
 def _tilted(mx, my):
@@ -513,7 +513,7 @@ def test_height_map_probe_then_run_follows_tilted_surface(win, tmp_path):
     assert hm.complete and hm.shape == (4, 4)       # 24 mm at <=10 mm steps
     assert hm.z[0, 0] == pytest.approx(_tilted(-2, -2), abs=0.01)
     assert win.chk_hm.isChecked() and win.view.heightmap is not None
-    assert "attiva" in win.hm_label.text()
+    assert "active" in win.hm_label.text()
     win.view.grab()          # the relief mesh paints without errors
     assert pump(lambda: win.status.state == "Idle" and win.act_run.isEnabled())
     win.run_program()

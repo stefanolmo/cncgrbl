@@ -39,9 +39,9 @@ class StateBadge(QLabel):
     def set_state(self, state: str, text: str | None = None) -> None:
         base = state.split(":", 1)[0]
         col = theme.STATE_COLORS.get(base, theme.MUTED)
-        labels = {"Disconnected": "Non connesso", "Connecting": "Connessione…", "Idle": "Pronto", "Run": "In esecuzione",
-                  "Hold": "In pausa", "Jog": "Jog", "Alarm": "ALLARME", "Home": "Homing", "Check": "Check mode",
-                  "Door": "Porta aperta", "Sleep": "Sleep"}
+        labels = {"Disconnected": "Not connected", "Connecting": "Connecting…", "Idle": "Ready", "Run": "Running",
+                  "Hold": "Paused", "Jog": "Jog", "Alarm": "ALARM", "Home": "Homing", "Check": "Check mode",
+                  "Door": "Door open", "Sleep": "Sleep"}
         self.setText(text or labels.get(base, base))
         c = QColor(col)
         self.setStyleSheet(
@@ -79,13 +79,13 @@ class AxisRow(QWidget):
         col.addWidget(self.mach)
         z = QToolButton()
         z.setText(f"{axis}0")
-        z.setToolTip(f"Azzera {axis} (imposta l'origine di lavoro qui)")
+        z.setToolTip(f"Zero {axis} (set the work origin here)")
         z.setFixedSize(46, 36)
         z.setStyleSheet("padding: 0;")
         z.clicked.connect(lambda: self.zeroClicked.emit(axis))
         g = QToolButton()
         g.setIcon(icon("target"))
-        g.setToolTip(f"Vai a {axis}=0")
+        g.setToolTip(f"Go to {axis}=0")
         g.setFixedSize(36, 36)
         g.setStyleSheet("padding: 0;")
         g.clicked.connect(lambda: self.gotoClicked.emit(axis))
@@ -179,7 +179,7 @@ class RapidBox(QWidget):
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(4)
-        t = QLabel("Rapidi")
+        t = QLabel("Rapid")
         t.setFixedWidth(64)
         self.value = QLabel("100%")
         self.value.setStyleSheet(f"font-family:{theme.MONO}; font-weight:700; color:{theme.ACCENT};")
@@ -330,7 +330,7 @@ class CodeEditor(QPlainTextEdit):
     def contextMenuEvent(self, e):
         menu = self.createStandardContextMenu()
         line = self.cursorForPosition(e.pos()).blockNumber()
-        act = menu.addAction(f"Avvia da riga {line + 1}…")
+        act = menu.addAction(f"Start from line {line + 1}…")
         act.triggered.connect(lambda: self.startFromLine.emit(line))
         menu.exec(e.globalPos())
 
@@ -353,9 +353,9 @@ class Console(QWidget):
         self.log.setMaximumBlockCount(3000)
         row = QHBoxLayout()
         self.input = QLineEdit()
-        self.input.setPlaceholderText("Comando GRBL o G-code, Invio per inviare (↑↓ cronologia)")
+        self.input.setPlaceholderText("GRBL command or G-code, Enter to send (↑↓ history)")
         self.input.returnPressed.connect(self._submit)
-        clear = QPushButton("Pulisci")
+        clear = QPushButton("Clear")
         clear.clicked.connect(self.log.clear)
         row.addWidget(self.input, 1)
         row.addWidget(clear)

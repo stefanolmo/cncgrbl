@@ -1,8 +1,10 @@
 [Desktop Entry]
 Type=Application
 Name=CNC Deck
-GenericName=Sender G-code GRBL
-Comment=Invia G-code a CNC GRBL via seriale
+GenericName=GRBL G-code sender
+GenericName[it]=Sender G-code GRBL
+Comment=Send G-code to a GRBL CNC over a serial port
+Comment[it]=Invia G-code a CNC GRBL via seriale
 Exec=@EXEC@ %f
 Icon=@ICON@
 Terminal=false

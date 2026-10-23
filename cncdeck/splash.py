@@ -203,10 +203,10 @@ class SplashScreen(QWidget):
         p.drawText(QPointF(x + 2, H * 0.47 + 50), CREDITS)
         p.setFont(QFont("sans", 10, QFont.DemiBold))
         p.setPen(QColor(theme.ACCENT))
-        p.drawText(QPointF(x + 2, H * 0.47 + 76), f"Versione {self.version}")
+        p.drawText(QPointF(x + 2, H * 0.47 + 76), f"Version {self.version}")
         p.setFont(QFont("sans", 8))
         p.setPen(QColor(255, 255, 255, 70))
-        p.drawText(QPointF(x + 2, H - 38), "Sender GRBL  ·  Convertitore SVG → G-code")
+        p.drawText(QPointF(x + 2, H - 38), "GRBL sender  ·  SVG to G-code converter")
 
     def _paint_progress(self, p: QPainter, k: float) -> None:
         x0, x1, y = 58.0, W - 58.0, H - 24.0

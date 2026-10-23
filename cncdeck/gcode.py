@@ -165,9 +165,9 @@ def parse_program(text: str, rapid_rates=(500.0, 500.0, 500.0), default_feed=0.0
             continue
         prog.commands.append((i, s))
         if M6_RE.search(PAREN_RE.sub("", raw).upper()):
-            warn.append(f"Riga {i + 1}: cambio utensile (M6) convertito in pausa M0: cambia l'utensile e premi Riprendi")
+            warn.append(f"Line {i + 1}: tool change (M6) converted to an M0 pause: change the tool and press Resume")
         if len(s) + 1 > MAX_LINE_LEN - 1:
-            warn.append(f"Riga {i + 1}: {len(s)} caratteri, troppo lunga per GRBL (max {MAX_LINE_LEN - 2})")
+            warn.append(f"Line {i + 1}: {len(s)} characters, too long for GRBL (max {MAX_LINE_LEN - 2})")
         if s.startswith("$"):
             continue
         gs, ms, vals = _split_words(s)
@@ -202,7 +202,7 @@ def parse_program(text: str, rapid_rates=(500.0, 500.0, 500.0), default_feed=0.0
                 pass
             elif g not in unsupported_seen:
                 unsupported_seen.add(g)
-                warn.append(f"Riga {i + 1}: G{g:g} non supportato da GRBL 1.1")
+                warn.append(f"Line {i + 1}: G{g:g} not supported by GRBL 1.1")
         if "F" in vals:
             feed = vals["F"] * k
         if "S" in vals:
@@ -238,7 +238,7 @@ def parse_program(text: str, rapid_rates=(500.0, 500.0, 500.0), default_feed=0.0
                     if feed > 0:
                         line_time[i] += dist / feed * 60.0
                     else:
-                        warn.append(f"Riga {i + 1}: movimento G1 senza avanzamento (F)")
+                        warn.append(f"Line {i + 1}: G1 move with no feed rate (F)")
             pos = tgt
         else:
             a, b, lin, oa, ob = {17: (0, 1, 2, "I", "J"), 18: (2, 0, 1, "K", "I"), 19: (1, 2, 0, "J", "K")}[plane]
@@ -250,11 +250,11 @@ def parse_program(text: str, rapid_rates=(500.0, 500.0, 500.0), default_feed=0.0
                 d2 = x * x + y * y
                 h = 4 * r * r - d2
                 if d2 == 0 or h < 0:
-                    warn.append(f"Riga {i + 1}: arco con raggio non valido")
+                    warn.append(f"Line {i + 1}: arc with invalid radius")
                     pos = tgt
                     continue
                 if h < 0.01:
-                    warn.append(f"Riga {i + 1}: raggio quasi uguale a metà corda, GRBL potrebbe rifiutare l'arco (error:34)")
+                    warn.append(f"Line {i + 1}: radius almost equal to half the chord, GRBL may reject the arc (error:34)")
                 ca, cb = arc_center_from_radius(pos[a], pos[b], tgt[a], tgt[b], r, cw)
             else:
                 ca = pos[a] + vals.get(oa, 0.0) * k
@@ -270,7 +270,7 @@ def parse_program(text: str, rapid_rates=(500.0, 500.0, 500.0), default_feed=0.0
             if feed > 0:
                 line_time[i] += length / feed * 60.0
             else:
-                warn.append(f"Riga {i + 1}: arco senza avanzamento (F)")
+                warn.append(f"Line {i + 1}: arc with no feed rate (F)")
             pos = tgt
 
     if starts:

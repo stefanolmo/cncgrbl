@@ -13,11 +13,11 @@ from .splash import SplashScreen
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(prog="cncdeck", description="Sender G-code per CNC GRBL 1.1")
-    ap.add_argument("file", nargs="?", help="file G-code da aprire")
-    ap.add_argument("--sim", action="store_true", help="collegati al simulatore GRBL interno")
-    ap.add_argument("--screenshot", metavar="PNG", help="(sviluppo) salva uno screenshot ed esci")
-    ap.add_argument("--no-splash", action="store_true", help="non mostrare la schermata iniziale")
+    ap = argparse.ArgumentParser(prog="cncdeck", description="G-code sender for GRBL 1.1 CNCs")
+    ap.add_argument("file", nargs="?", help="G-code file to open")
+    ap.add_argument("--sim", action="store_true", help="connect to the built-in GRBL simulator")
+    ap.add_argument("--screenshot", metavar="PNG", help="(development) save a screenshot and exit")
+    ap.add_argument("--no-splash", action="store_true", help="do not show the splash screen")
     args = ap.parse_args(argv)
 
     app = QApplication(sys.argv[:1])

@@ -57,7 +57,7 @@ def test_json_roundtrip_and_errors():
     with pytest.raises(HeightMapError):
         HeightMap.from_json('{"xs": [0, 1], "ys": [0, 1], "z": [[0]]}')
     with pytest.raises(HeightMapError):
-        HeightMap.from_json("non json")
+        HeightMap.from_json("not json")
 
 
 def test_correct_line_is_split_at_grid_and_follows_surface():
@@ -220,7 +220,7 @@ def test_probe_refuses_when_pin_already_closed(app, conn):
     conn.send_line("G90G0Z-30")
     assert pump(app, lambda: "P" in conn.st["status"].pins)
     err = HeightMapProbe(conn).start(ProbeParams(area=(0, 0, 10, 10)))
-    assert err and "chiusa" in err
+    assert err and "closed" in err
 
 
 def test_probe_fails_cleanly_without_contact(app, conn):
@@ -236,7 +236,7 @@ def test_probe_fails_cleanly_without_contact(app, conn):
     assert probe.start(ProbeParams(area=(0, 0, 10, 10), step=10, depth=1, feed=120)) is None
     assert pump(app, lambda: res)
     assert "map" not in res and not probe.active
-    assert "contatto" in res["err"] or "Allarme" in res["err"]
+    assert "contact" in res["err"] or "Alarm" in res["err"]
 
 
 def test_params_validation():
